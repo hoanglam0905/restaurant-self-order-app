@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../staff/staff_navigation_shell.dart';
 import '../controllers/home_controller.dart';
 import '../data/services/home_dish_service.dart';
 import 'widgets/home_banner.dart';
@@ -50,6 +51,25 @@ class _HomeViewState extends State<HomeView> {
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const StaffNavigationShell(),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF9E3A14),
+        icon: const Icon(Icons.badge_rounded, color: Colors.white),
+        label: const Text(
+          'Staff Portal',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 
@@ -61,3 +81,4 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 }
+

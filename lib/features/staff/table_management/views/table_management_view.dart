@@ -1,0 +1,528 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../controllers/table_controller.dart';
+import 'widgets/table_card.dart';
+
+class TableManagementView extends StatelessWidget {
+  const TableManagementView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<TableController>();
+
+    // Aesthetic Style Constants
+    const primaryColor = Color(0xFF9E3A14); // Deep rust brown
+    const scaffoldBg = Color(0xFFFCFCFC);
+
+    return Scaffold(
+      backgroundColor: scaffoldBg,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Header: Title, Search, Avatar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.grid_view_rounded,
+                          color: primaryColor,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Quản lý bàn',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      // Search button
+                      IconButton(
+                        onPressed: () => _showSearchDialog(context, controller),
+                        icon: const Icon(
+                          Icons.search_rounded,
+                          color: Colors.black54,
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Avatar
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: primaryColor.withValues(alpha: 0.3), width: 1.5),
+                          image: const DecorationImage(
+                            image: NetworkImage(
+                              'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80',
+                            ),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // 2. Summary Indicator Cards Row
+              Obx(() {
+                final total = controller.totalTablesCount;
+                final occupied = controller.occupiedTablesCount;
+                final empty = controller.emptyTablesCount;
+                final occupiedPct = controller.occupiedPercentage;
+                final emptyPct = controller.emptyPercentage;
+
+                return Row(
+                  children: [
+                    // Card 1: TỔNG BÀN
+                    Expanded(
+                      child: _buildMetricCard(
+                        title: 'TỔNG BÀN',
+                        value: '$total',
+                        suffix: 'bàn',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Card 2: BÀN CÓ KHÁCH
+                    Expanded(
+                      child: _buildMetricCard(
+                        title: 'BÀN CÓ KHÁCH',
+                        value: '$occupied',
+                        percentage: '$occupiedPct%',
+                        percentageColor: const Color(0xFFC62828), // Alert Red
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Card 3: BÀN ĐANG TRỐNG
+                    Expanded(
+                      child: _buildMetricCard(
+                        title: 'BÀN ĐANG TRỐNG',
+                        value: '$empty',
+                        percentage: '$emptyPct%',
+                        percentageColor: const Color(0xFF2E7D32), // Green
+                      ),
+                    ),
+                  ],
+                );
+              }),
+              const SizedBox(height: 20),
+
+              // 3. Filters Row: Sảnh v, Tất cả v, + Đặt món
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      // Sảnh filter dropdown
+                      Obx(() => _buildDropdownFilter(
+                            label: controller.selectedArea.value,
+                            icon: Icons.keyboard_arrow_down_rounded,
+                            onTap: () => _showAreaSelection(context, controller),
+                          )),
+                      const SizedBox(width: 8),
+                      // Tất cả filter dropdown
+                      Obx(() => _buildDropdownFilter(
+                            label: controller.selectedFilterType.value,
+                            icon: Icons.filter_list_rounded,
+                            onTap: () => _showFilterTypeSelection(context, controller),
+                          )),
+                    ],
+                  ),
+
+                  // + Đặt món primary button
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Chức năng Đặt món đang được phát triển.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                    label: const Text(
+                      'Đặt món',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Search query indicator if search active
+              Obx(() {
+                if (controller.searchQuery.value.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Kết quả tìm kiếm: "${controller.searchQuery.value}"',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => controller.updateSearchQuery(''),
+                        child: const Icon(
+                          Icons.cancel_rounded,
+                          size: 18,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              // 4. Refreshable Grid of Table Cards
+              Expanded(
+                child: Obx(() {
+                  if (controller.isLoading.value && controller.tables.isEmpty) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: primaryColor),
+                    );
+                  }
+
+                  if (controller.errorMessage.value.isNotEmpty && controller.tables.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade400),
+                          const SizedBox(height: 12),
+                          Text(
+                            controller.errorMessage.value,
+                            style: const TextStyle(fontSize: 14, color: Colors.black54),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: controller.loadTables,
+                            child: const Text('Thử lại'),
+                          )
+                        ],
+                      ),
+                    );
+                  }
+
+                  final filtered = controller.filteredTables;
+                  if (filtered.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Không tìm thấy bàn nào phù hợp.',
+                        style: TextStyle(fontSize: 15, color: Colors.black45),
+                      ),
+                    );
+                  }
+
+                  return RefreshIndicator(
+                    color: primaryColor,
+                    onRefresh: controller.loadTables,
+                    child: GridView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 24, top: 4),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 1.2,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final table = filtered[index];
+                        return TableCard(
+                          table: table,
+                          onTap: () => _onTableCardTapped(context, table),
+                          onMoreTap: () => _onTableMoreTapped(context, table),
+                        );
+                      },
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Metric visual item builder
+  Widget _buildMetricCard({
+    required String title,
+    required String value,
+    String? suffix,
+    String? percentage,
+    Color? percentageColor,
+  }) {
+    const cardBgColor = Colors.white;
+    const borderColor = Color(0xFFF0F2F5);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: cardBgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.015),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: Colors.black54,
+              letterSpacing: 0.1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(width: 4),
+              if (suffix != null)
+                Text(
+                  suffix,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                  ),
+                ),
+              if (percentage != null)
+                Text(
+                  percentage,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: percentageColor ?? Colors.black54,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Beautiful rounded dropdown pill
+  Widget _buildDropdownFilter({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF1F6),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E7EE), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A5568),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              icon,
+              size: 16,
+              color: const Color(0xFF4A5568),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Handle tap actions
+  void _onTableCardTapped(BuildContext context, dynamic table) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Xem chi tiết bàn ${table.tableNumber}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  void _onTableMoreTapped(BuildContext context, dynamic table) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Lựa chọn cho bàn ${table.tableNumber}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // Display Search Dialog
+  void _showSearchDialog(BuildContext context, TableController controller) {
+    final textController = TextEditingController(text: controller.searchQuery.value);
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Tìm kiếm bàn', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: textController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'Nhập số bàn (vd: T-01, 1)...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                controller.updateSearchQuery(textController.text.trim());
+                Navigator.pop(context);
+              },
+              child: const Text('Tìm'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Display Area selection sheet
+  void _showAreaSelection(BuildContext context, TableController controller) {
+    final areas = ['Sảnh', 'Phòng VIP', 'Ngoài trời'];
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Chọn Khu Vực',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Divider(height: 1),
+              ...areas.map((area) => ListTile(
+                    title: Text(area, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: controller.selectedArea.value == area
+                        ? const Icon(Icons.check, color: Color(0xFF9E3A14))
+                        : null,
+                    onTap: () {
+                      controller.changeArea(area);
+                      Navigator.pop(context);
+                    },
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Display Filter selection sheet
+  void _showFilterTypeSelection(BuildContext context, TableController controller) {
+    final filters = ['Tất cả', 'Bàn trống', 'Bàn có khách', 'Đặt trước'];
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Lọc theo trạng thái',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Divider(height: 1),
+              ...filters.map((filter) => ListTile(
+                    title: Text(filter, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: controller.selectedFilterType.value == filter
+                        ? const Icon(Icons.check, color: Color(0xFF9E3A14))
+                        : null,
+                    onTap: () {
+                      controller.changeFilterType(filter);
+                      Navigator.pop(context);
+                    },
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
