@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/network/api_client.dart';
+import 'dish_management/controllers/kitchen_controller.dart';
+import 'dish_management/data/services/kitchen_service.dart';
+import 'dish_management/views/kitchen_management_view.dart';
 import 'table_management/controllers/table_controller.dart';
 import 'table_management/data/services/table_service.dart';
 import 'table_management/views/table_management_view.dart';
@@ -24,16 +27,17 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
         tableService: TableService(ApiClient()),
       ));
     }
+    if (!Get.isRegistered<KitchenController>()) {
+      Get.put(KitchenController(
+        kitchenService: KitchenService(),
+      ));
+    }
   }
 
   // Views mapping
   final List<Widget> _views = [
     const TableManagementView(),
-    const _PlaceholderScreen(
-      title: 'Bếp (KDS)',
-      icon: Icons.restaurant_rounded,
-      subtitle: 'Hệ thống màn hình hiển thị order nhà bếp',
-    ),
+    const KitchenManagementView(),
     const _PlaceholderScreen(
       title: 'Yêu cầu Phục vụ',
       icon: Icons.notifications_active_rounded,
