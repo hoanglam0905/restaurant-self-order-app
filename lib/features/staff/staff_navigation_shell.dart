@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import '../../core/network/api_client.dart';
 import 'dish_management/controllers/kitchen_controller.dart';
 import 'dish_management/data/services/kitchen_service.dart';
 import 'dish_management/views/kitchen_management_view.dart';
+import 'history_management/views/history_management_view.dart';
 import 'notification_management/views/notification_management_view.dart';
 import 'table_management/controllers/table_controller.dart';
 import 'table_management/data/services/table_service.dart';
@@ -19,33 +21,31 @@ class StaffNavigationShell extends StatefulWidget {
 class _StaffNavigationShellState extends State<StaffNavigationShell> {
   int _currentIndex = 0;
 
-  // Lazily inject TableController when entering staff flow if it isn't already registered
   @override
   void initState() {
     super.initState();
     if (!Get.isRegistered<TableController>()) {
-      Get.put(TableController(
-        tableService: TableService(ApiClient()),
-      ));
+      Get.put(
+        TableController(
+          tableService: TableService(ApiClient()),
+        ),
+      );
     }
     if (!Get.isRegistered<KitchenController>()) {
-      Get.put(KitchenController(
-        kitchenService: KitchenService(),
-      ));
+      Get.put(
+        KitchenController(
+          kitchenService: KitchenService(),
+        ),
+      );
     }
   }
 
-  // Views mapping
-  final List<Widget> _views = [
-    const TableManagementView(),
-    const KitchenManagementView(),
-    const NotificationManagementView(),
-    const _PlaceholderScreen(
-      title: 'Lịch sử phục vụ',
-      icon: Icons.history_rounded,
-      subtitle: 'Lịch sử các đơn đặt món và thanh toán đã phục vụ',
-    ),
-    const _PlaceholderScreen(
+  final List<Widget> _views = const [
+    TableManagementView(),
+    KitchenManagementView(),
+    NotificationManagementView(),
+    HistoryManagementView(),
+    _PlaceholderScreen(
       title: 'Cài đặt hệ thống',
       icon: Icons.settings_rounded,
       subtitle: 'Cài đặt tài khoản, ca trực và thiết bị',
@@ -54,8 +54,8 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
 
   @override
   Widget build(BuildContext context) {
-    const selectedColor = Color(0xFF9E3A14); // Deep rust brown matching mockup
-    const unselectedColor = Color(0xFF718096); // Soft blue-grey
+    const selectedColor = Color(0xFF9E3A14);
+    const unselectedColor = Color(0xFF718096);
     const bottomNavBg = Color(0xFFF8FAFC);
 
     return Scaffold(
@@ -103,7 +103,6 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
                 clipBehavior: Clip.none,
                 children: [
                   const Icon(Icons.notifications_rounded, size: 22),
-                  // Notification dot on "Phục vụ" matching the mockup
                   Positioned(
                     top: -2,
                     right: -2,
@@ -135,7 +134,6 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
   }
 }
 
-// Visual placeholder view for tabs that are pending implementation
 class _PlaceholderScreen extends StatelessWidget {
   const _PlaceholderScreen({
     required this.title,
@@ -155,11 +153,10 @@ class _PlaceholderScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFFCFCFC),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header title
               Row(
                 children: [
                   Container(
@@ -168,11 +165,7 @@ class _PlaceholderScreen extends StatelessWidget {
                       color: primaryColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      icon,
-                      color: primaryColor,
-                      size: 22,
-                    ),
+                    child: Icon(icon, color: primaryColor, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -196,13 +189,12 @@ class _PlaceholderScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: const Color(0xFFF1F5F9),
                         shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+                        border: Border.all(
+                          color: const Color(0xFFE2E8F0),
+                          width: 2,
+                        ),
                       ),
-                      child: Icon(
-                        icon,
-                        size: 64,
-                        color: const Color(0xFF94A3B8),
-                      ),
+                      child: Icon(icon, size: 64, color: const Color(0xFF94A3B8)),
                     ),
                     const SizedBox(height: 24),
                     Text(
