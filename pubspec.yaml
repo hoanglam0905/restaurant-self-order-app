@@ -61,6 +61,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/home/
+    - assets/images/welcome/
+    - assets/images/auth/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
