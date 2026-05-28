@@ -4,6 +4,7 @@ import '../../core/network/api_client.dart';
 import 'dish_management/controllers/kitchen_controller.dart';
 import 'dish_management/data/services/kitchen_service.dart';
 import 'dish_management/views/kitchen_management_view.dart';
+import 'notification_management/views/notification_management_view.dart';
 import 'table_management/controllers/table_controller.dart';
 import 'table_management/data/services/table_service.dart';
 import 'table_management/views/table_management_view.dart';
@@ -38,11 +39,7 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
   final List<Widget> _views = [
     const TableManagementView(),
     const KitchenManagementView(),
-    const _PlaceholderScreen(
-      title: 'Yêu cầu Phục vụ',
-      icon: Icons.notifications_active_rounded,
-      subtitle: 'Xem các yêu cầu gọi phục vụ & hỗ trợ thanh toán',
-    ),
+    const NotificationManagementView(),
     const _PlaceholderScreen(
       title: 'Lịch sử phục vụ',
       icon: Icons.history_rounded,
