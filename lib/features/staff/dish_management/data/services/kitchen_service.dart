@@ -1,51 +1,119 @@
-import '../models/staff_kitchen_order_item_model.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 import '../models/staff_kitchen_order_model.dart';
 
 class KitchenService {
-  Future<List<StaffKitchenOrderModel>> getKitchenOrders() async {
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+  KitchenService({
+    this.graphqlUrl = 'http://localhost:8081/graphql',
+  });
 
-    return [
-      StaffKitchenOrderModel(
-        id: 1,
-        tableNumber: 'T-08',
-        status: KitchenOrderStatus.pending,
-        createdAt: DateTime(2026, 5, 26, 14, 9),
-        alertText: 'Thêm bánh mì',
-        items: [
-          StaffKitchenOrderItemModel(name: 'Bouillabaisse', quantity: 1, note: 'Thêm bánh mì'),
-        ],
-      ),
-      StaffKitchenOrderModel(
-        id: 2,
-        tableNumber: 'T-01',
-        status: KitchenOrderStatus.inProgress,
-        createdAt: DateTime(2026, 5, 26, 14, 15),
-        items: [
-          StaffKitchenOrderItemModel(name: 'Salad Landaise', quantity: 1, note: 'ít dầu giấm'),
-          StaffKitchenOrderItemModel(name: 'Ratatouille', quantity: 1),
-        ],
-      ),
-      StaffKitchenOrderModel(
-        id: 3,
-        tableNumber: 'T-04',
-        status: KitchenOrderStatus.pending,
-        createdAt: DateTime(2026, 5, 26, 14, 22),
-        alertText: 'Không hành, thêm sốt cam',
-        items: [
-          StaffKitchenOrderItemModel(name: 'Magret De Canard', quantity: 2, note: 'Không hành, thêm sốt cam'),
-          StaffKitchenOrderItemModel(name: 'Soupe à l’Oignon', quantity: 1, note: 'Nóng hổi'),
-        ],
-      ),
-      StaffKitchenOrderModel(
-        id: 4,
-        tableNumber: 'T-12',
-        status: KitchenOrderStatus.inProgress,
-        createdAt: DateTime(2026, 5, 26, 14, 25),
-        items: [
-          StaffKitchenOrderItemModel(name: 'Filet Mignon', quantity: 3, note: 'Medium Rare'),
-        ],
-      ),
-    ];
+  final String graphqlUrl;
+
+  // Chỉ hard-code để test local. Không push token lên Git.
+  static const String staffToken = String.fromEnvironment(
+  'STAFF_TOKEN',
+  defaultValue: '',
+);
+
+Map<String, String> get _headers {
+  return {
+    'Content-Type': 'application/json',
+    if (staffToken.isNotEmpty) 'Authorization': 'Bearer $staffToken',
+  };
+}
+
+  Future<List<StaffKitchenOrderModel>> getKitchenOrders() async {
+    const query = '''
+      query {
+        orders {
+          orderId
+          customerName
+          tableNumber
+          status
+          totalAmount
+          paymentStatus
+          items {
+            dishId
+            dishName
+            quantity
+            notes
+            price
+            status
+          }
+        }
+      }
+    ''';
+
+    final response = await http.post(
+      Uri.parse(graphqlUrl),
+      headers: _headers,
+      body: jsonEncode({
+        'query': query,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Không thể tải đơn bếp: ${response.body}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (decoded['errors'] != null) {
+      throw Exception('GraphQL lỗi: ${jsonEncode(decoded['errors'])}');
+    }
+
+    final ordersJson = decoded['data']?['orders'];
+
+    if (ordersJson is! List) {
+      throw Exception('Dữ liệu orders không đúng định dạng');
+    }
+
+    return ordersJson
+        .whereType<Map<String, dynamic>>()
+        .map(StaffKitchenOrderModel.fromJson)
+        .toList();
+  }
+
+  Future<void> updateOrderItemStatus({
+    required int orderId,
+    required int dishId,
+    required String status,
+  }) async {
+    const mutation = '''
+      mutation UpdateOrderItemStatus(\$orderId: ID!, \$dishId: ID!, \$status: String!) {
+        updateOrderItemStatus(orderId: \$orderId, dishId: \$dishId, status: \$status) {
+          orderId
+          status
+          items {
+            dishId
+            status
+          }
+        }
+      }
+    ''';
+
+    final response = await http.post(
+      Uri.parse(graphqlUrl),
+      headers: _headers,
+      body: jsonEncode({
+        'query': mutation,
+        'variables': {
+          'orderId': orderId.toString(),
+          'dishId': dishId.toString(),
+          'status': status,
+        },
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Không thể cập nhật trạng thái món: ${response.body}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (decoded['errors'] != null) {
+      throw Exception('GraphQL lỗi: ${jsonEncode(decoded['errors'])}');
+    }
   }
 }

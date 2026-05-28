@@ -86,50 +86,38 @@ class KitchenOrderCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            ...order.items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.name,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
+            ...order.items.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.name,
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                             ),
-                          ),
-                          if (item.note != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                item.note!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF6B7280),
+                            if (item.note != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  item.note!,
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      'x${item.quantity}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF4B5563),
+                      Text(
+                        'x${item.quantity}',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF4B5563)),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                    ],
+                  ),
+                )),
             const SizedBox(height: 4),
-            if (order.alertText != null)
+            if (order.alertText != null && order.alertText!.trim().isNotEmpty)
               Row(
                 children: [
                   const Icon(
@@ -159,27 +147,15 @@ class KitchenOrderCard extends StatelessWidget {
                         ? null
                         : (isPending ? onStartPressed : onCompletePressed),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isPending
-                          ? const Color(0xFF9E3A14)
-                          : isInProgress
-                          ? const Color(0xFF2E7D32)
-                          : const Color(0xFF94A3B8),
+                      backgroundColor: isPending ? const Color(0xFF9E3A14) : isInProgress ? const Color(0xFF2E7D32) : const Color(0xFF94A3B8),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
                     child: Text(
-                      isPending
-                          ? 'ĐANG LÀM'
-                          : isInProgress
-                          ? 'HOÀN TẤT'
-                          : 'ĐÃ HOÀN TẤT',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
+                      isPending ? 'ĐANG LÀM' : isInProgress ? 'HOÀN TẤT' : 'ĐÃ HOÀN TẤT',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white),
                     ),
                   ),
                 ),

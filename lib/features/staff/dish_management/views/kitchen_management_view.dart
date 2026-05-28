@@ -66,12 +66,7 @@ class KitchenManagementView extends StatelessWidget {
                   ElevatedButton.icon(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Bộ lọc thời gian đang được phát triển.',
-                          ),
-                          duration: Duration(seconds: 2),
-                        ),
+                        const SnackBar(content: Text('Bộ lọc thời gian đang được phát triển.'), duration: Duration(seconds: 2)),
                       );
                     },
                     icon: const Icon(Icons.access_time_rounded, size: 18),
@@ -81,13 +76,8 @@ class KitchenManagementView extends StatelessWidget {
                       foregroundColor: primaryColor,
                       elevation: 0,
                       side: const BorderSide(color: Color(0xFFDFE3E8)),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                   ),
                 ],
@@ -120,43 +110,27 @@ class KitchenManagementView extends StatelessWidget {
                       child: CircularProgressIndicator(color: primaryColor),
                     );
                   }
-                  if (controller.errorMessage.value.isNotEmpty &&
-                      controller.orders.isEmpty) {
+                  if (controller.errorMessage.value.isNotEmpty && controller.orders.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            size: 48,
-                            color: Colors.red.shade400,
-                          ),
+                          Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade400),
                           const SizedBox(height: 12),
-                          Text(
-                            controller.errorMessage.value,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.black54,
-                            ),
-                          ),
+                          Text(controller.errorMessage.value, style: const TextStyle(fontSize: 14, color: Colors.black54)),
                           const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: controller.loadOrders,
-                            child: const Text('Thử lại'),
-                          ),
+                          ElevatedButton(onPressed: controller.loadOrders, child: const Text('Thử lại')),
                         ],
                       ),
                     );
                   }
+
                   final filtered = controller.filteredOrders;
+
                   if (filtered.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'Không có đơn nào phù hợp.',
-                        style: TextStyle(fontSize: 15, color: Colors.black45),
-                      ),
-                    );
+                    return const Center(child: Text('Không có đơn nào phù hợp.', style: TextStyle(fontSize: 15, color: Colors.black45)));
                   }
+
                   return RefreshIndicator(
                     color: primaryColor,
                     onRefresh: controller.loadOrders,
@@ -167,11 +141,11 @@ class KitchenManagementView extends StatelessWidget {
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final order = filtered[index];
+
                         return KitchenOrderCard(
                           order: order,
                           onStartPressed: () => controller.startOrder(order),
-                          onCompletePressed: () =>
-                              controller.completeOrder(order),
+                          onCompletePressed: () => controller.completeOrder(order),
                         );
                       },
                     ),
@@ -227,9 +201,7 @@ class KitchenManagementView extends StatelessWidget {
   }
 
   void _showSearchDialog(BuildContext context, KitchenController controller) {
-    final textController = TextEditingController(
-      text: controller.searchQuery.value,
-    );
+    final textController = TextEditingController(text: controller.searchQuery.value);
     showDialog(
       context: context,
       builder: (context) {
@@ -241,16 +213,10 @@ class KitchenManagementView extends StatelessWidget {
           content: TextField(
             controller: textController,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Nhập số bàn hoặc tên món',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(hintText: 'Nhập số bàn hoặc tên món', border: OutlineInputBorder()),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
             ElevatedButton(
               onPressed: () {
                 controller.updateSearchQuery(textController.text.trim());
@@ -266,6 +232,7 @@ class KitchenManagementView extends StatelessWidget {
 
   void _showStatusPicker(BuildContext context, KitchenController controller) {
     final options = ['Tất cả', 'Chưa làm', 'Đang làm', 'Hoàn tất'];
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -278,27 +245,17 @@ class KitchenManagementView extends StatelessWidget {
             children: [
               const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'Lọc trạng thái đơn',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
+                child: Text('Lọc trạng thái đơn', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
               const Divider(height: 1),
-              ...options.map(
-                (status) => ListTile(
-                  title: Text(
-                    status,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  trailing: controller.selectedStatus.value == status
-                      ? const Icon(Icons.check, color: Color(0xFF9E3A14))
-                      : null,
-                  onTap: () {
-                    controller.changeStatusFilter(status);
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
+              ...options.map((status) => ListTile(
+                    title: Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: controller.selectedStatus.value == status ? const Icon(Icons.check, color: Color(0xFF9E3A14)) : null,
+                    onTap: () {
+                      controller.changeStatusFilter(status);
+                      Navigator.pop(context);
+                    },
+                  )),
             ],
           ),
         );
