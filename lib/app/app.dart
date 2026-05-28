@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
-import '../features/staff/staff_navigation_shell.dart';
+import '../features/customer/welcome/views/welcome_view.dart';
 
 class RestaurantApp extends StatelessWidget {
   const RestaurantApp({super.key});
@@ -12,8 +12,7 @@ class RestaurantApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Bon Appetit',
       theme: AppTheme.light,
-      home: const StaffNavigationShell(),
+      home: const WelcomeView(),
     );
   }
 }
-
