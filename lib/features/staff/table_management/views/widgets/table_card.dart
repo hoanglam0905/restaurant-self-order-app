@@ -3,12 +3,7 @@ import '../../data/models/staff_table_model.dart';
 import '../../data/models/table_status.dart';
 
 class TableCard extends StatelessWidget {
-  const TableCard({
-    super.key,
-    required this.table,
-    this.onTap,
-    this.onMoreTap,
-  });
+  const TableCard({super.key, required this.table, this.onTap, this.onMoreTap});
 
   final StaffTableModel table;
   final VoidCallback? onTap;
@@ -19,7 +14,7 @@ class TableCard extends StatelessWidget {
     final isOccupied = table.status == TableStatus.occupied;
     final isReserved = table.status == TableStatus.reserved;
     final isActive = isOccupied || isReserved;
-    
+
     // Aesthetic Color tokens matching the mockup
     const occupiedBorderColor = Color(0xFF9E3A14);
     const occupiedTextColor = Color(0xFF9E3A14);
@@ -36,18 +31,18 @@ class TableCard extends StatelessWidget {
     final borderColor = isOccupied
         ? occupiedBorderColor
         : isReserved
-            ? reservedBorderColor
-            : Colors.transparent;
+        ? reservedBorderColor
+        : Colors.transparent;
     final bgColor = isOccupied
         ? occupiedBgColor
         : isReserved
-            ? reservedBgColor
-            : emptyBgColor;
+        ? reservedBgColor
+        : emptyBgColor;
     final accentTextColor = isOccupied
         ? occupiedTextColor
         : isReserved
-            ? reservedTextColor
-            : emptyTextColor;
+        ? reservedTextColor
+        : emptyTextColor;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -66,7 +61,7 @@ class TableCard extends StatelessWidget {
                         color: borderColor.withValues(alpha: 0.06),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
-                      )
+                      ),
                     ]
                   : null,
             ),
@@ -92,7 +87,9 @@ class TableCard extends StatelessWidget {
                           Icon(
                             Icons.people_outline_rounded,
                             size: 14,
-                            color: isActive ? Colors.black54 : emptyTextColor.withValues(alpha: 0.7),
+                            color: isActive
+                                ? Colors.black54
+                                : emptyTextColor.withValues(alpha: 0.7),
                           ),
                           const SizedBox(width: 3),
                           Text(
@@ -131,7 +128,7 @@ class TableCard extends StatelessWidget {
                         ),
                       ),
                     const Spacer(),
-                    
+
                     // Bottom Row: Time and Action menu
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -142,14 +139,6 @@ class TableCard extends StatelessWidget {
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade600,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: onMoreTap,
-                          child: const Icon(
-                            Icons.more_horiz_rounded,
-                            color: occupiedTextColor,
-                            size: 22,
                           ),
                         ),
                       ],
@@ -248,6 +237,40 @@ class TableCard extends StatelessWidget {
               ),
             ),
           ),
+
+        // Notification action in bottom-right corner for every table
+        Positioned(
+          right: 10,
+          bottom: 10,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onMoreTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: occupiedTextColor.withValues(alpha: 0.14),
+                  ),
+                ),
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  table.hasAlert
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_none_rounded,
+                  color: table.hasAlert
+                      ? const Color(0xFFC62828)
+                      : (isActive
+                            ? occupiedTextColor
+                            : const Color(0xFF8A9AAB)),
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
