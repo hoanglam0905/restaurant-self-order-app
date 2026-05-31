@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../../data/models/auth_response_model.dart';
 import '../data/models/register_request_model.dart';
+import '../data/models/verify_register_otp_request_model.dart';
 import '../data/services/register_service.dart';
 
 class RegisterController extends GetxController {
@@ -17,11 +18,14 @@ class RegisterController extends GetxController {
   final TextEditingController passwordTextController = TextEditingController();
   final TextEditingController confirmPasswordTextController =
       TextEditingController();
+  final TextEditingController otpTextController = TextEditingController();
 
   final RxBool isLoading = false.obs;
+  final RxBool isVerifyingOtp = false.obs;
   final RxBool obscurePassword = true.obs;
   final RxBool obscureConfirmPassword = true.obs;
   final RxString errorMessage = ''.obs;
+  final RxString otpErrorMessage = ''.obs;
 
   void togglePasswordVisibility() {
     obscurePassword.value = !obscurePassword.value;
@@ -29,6 +33,11 @@ class RegisterController extends GetxController {
 
   void toggleConfirmPasswordVisibility() {
     obscureConfirmPassword.value = !obscureConfirmPassword.value;
+  }
+
+  void resetOtpState() {
+    otpTextController.clear();
+    otpErrorMessage.value = '';
   }
 
   Future<AuthResponseModel?> submit() async {
@@ -77,6 +86,33 @@ class RegisterController extends GetxController {
     }
   }
 
+  Future<AuthResponseModel?> verifyRegisterOtp() async {
+    final email = emailTextController.text.trim();
+    final otp = otpTextController.text.trim();
+
+    if (otp.isEmpty) {
+      otpErrorMessage.value = 'Vui lòng nhập mã OTP.';
+      return null;
+    }
+
+    isVerifyingOtp.value = true;
+    otpErrorMessage.value = '';
+
+    try {
+      return await _registerService.verifyRegisterOtp(
+        VerifyRegisterOtpRequestModel(email: email, otp: otp),
+      );
+    } on RegisterException catch (error) {
+      otpErrorMessage.value = error.message;
+      return null;
+    } catch (_) {
+      otpErrorMessage.value = 'Không thể xác thực OTP.';
+      return null;
+    } finally {
+      isVerifyingOtp.value = false;
+    }
+  }
+
   @override
   void onClose() {
     fullNameTextController.dispose();
@@ -84,6 +120,7 @@ class RegisterController extends GetxController {
     phoneTextController.dispose();
     passwordTextController.dispose();
     confirmPasswordTextController.dispose();
+    otpTextController.dispose();
     super.onClose();
   }
 }
