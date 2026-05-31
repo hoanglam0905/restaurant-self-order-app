@@ -136,28 +136,30 @@ class TableManagementView extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      // Sảnh filter dropdown
-                      Obx(() => _buildDropdownFilter(
-                            label: controller.selectedArea.value,
-                            icon: Icons.keyboard_arrow_down_rounded,
-                            onTap: () => _showAreaSelection(context, controller),
-                          )),
+                      Obx(
+                        () => _buildDropdownFilter(
+                          label: controller.selectedArea.value,
+                          icon: Icons.keyboard_arrow_down_rounded,
+                          onTap: () => _showAreaSelection(context, controller),
+                        ),
+                      ),
                       const SizedBox(width: 8),
-                      // Tất cả filter dropdown
-                      Obx(() => _buildDropdownFilter(
-                            label: controller.selectedFilterType.value,
-                            icon: Icons.filter_list_rounded,
-                            onTap: () => _showFilterTypeSelection(context, controller),
-                          )),
+                      Obx(
+                        () => _buildDropdownFilter(
+                          label: controller.selectedFilterType.value,
+                          icon: Icons.filter_list_rounded,
+                          onTap: () =>
+                              _showFilterTypeSelection(context, controller),
+                        ),
+                      ),
                     ],
                   ),
-
-                  // + Đặt món primary button
                   ElevatedButton.icon(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Chức năng Đặt món đang được phát triển.'),
+                          content:
+                              Text('Chức năng Đặt món đang được phát triển.'),
                           duration: Duration(seconds: 2),
                         ),
                       );
@@ -194,7 +196,10 @@ class TableManagementView extends StatelessWidget {
 
               // Search query indicator
               Obx(() {
-                if (controller.searchQuery.value.isEmpty) return const SizedBox.shrink();
+                if (controller.searchQuery.value.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
@@ -236,21 +241,32 @@ class TableManagementView extends StatelessWidget {
                   if (controller.errorMessage.value.isNotEmpty &&
                       controller.tables.isEmpty) {
                     return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade400),
-                          const SizedBox(height: 12),
-                          Text(
-                            controller.errorMessage.value,
-                            style: const TextStyle(fontSize: 14, color: Colors.black54),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: controller.loadTables,
-                            child: const Text('Thử lại'),
-                          )
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline_rounded,
+                              size: 48,
+                              color: Colors.red.shade400,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              controller.errorMessage.value,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: controller.loadTables,
+                              child: const Text('Thử lại'),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }
@@ -275,7 +291,8 @@ class TableManagementView extends StatelessWidget {
                     child: GridView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.only(bottom: 24, top: 4),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: 14,
                         mainAxisSpacing: 14,
@@ -406,15 +423,198 @@ class TableManagementView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(icon, size: 16, color: const Color(0xFF4A5568)),
+            Icon(
+              icon,
+              size: 16,
+              color: const Color(0xFF4A5568),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Handle tap actions
-  void _onTableCardTapped(BuildContext context, dynamic table) {
+  Future<void> _onTableCardTapped(
+    BuildContext context,
+    StaffTableModel table,
+  ) async {
+    final controller = Get.find<TableController>();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF9E3A14),
+          ),
+        );
+      },
+    );
+
+    final tableDetail = await controller.getTableDetail(table.id);
+
+    if (!context.mounted) return;
+
+    Navigator.pop(context);
+
+    if (tableDetail == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage.value),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Chi tiết ${tableDetail.tableNumber}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Mã bàn', '${tableDetail.id}'),
+              _buildDetailRow('Sức chứa', '${tableDetail.capacity} người'),
+              _buildDetailRow('Trạng thái', _getStatusLabel(tableDetail.status)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đóng'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _onTableMoreTapped(context, tableDetail);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9E3A14),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Cập nhật'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _onTableMoreTapped(
+    BuildContext context,
+    StaffTableModel table,
+  ) {
+    final controller = Get.find<TableController>();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Cập nhật ${table.tableNumber}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.event_available),
+                title: const Text('Chuyển thành Bàn trống'),
+                onTap: () async {
+                  Navigator.pop(bottomSheetContext);
+
+                  await _updateStatusAndShowResult(
+                    context: context,
+                    controller: controller,
+                    table: table,
+                    status: TableStatus.available,
+                    successMessage:
+                        'Đã chuyển ${table.tableNumber} thành bàn trống.',
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.people),
+                title: const Text('Chuyển thành Bàn có khách'),
+                onTap: () async {
+                  Navigator.pop(bottomSheetContext);
+
+                  await _updateStatusAndShowResult(
+                    context: context,
+                    controller: controller,
+                    table: table,
+                    status: TableStatus.occupied,
+                    successMessage:
+                        'Đã chuyển ${table.tableNumber} thành bàn có khách.',
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.schedule),
+                title: const Text('Chuyển thành Đặt trước'),
+                onTap: () async {
+                  Navigator.pop(bottomSheetContext);
+
+                  await _updateStatusAndShowResult(
+                    context: context,
+                    controller: controller,
+                    table: table,
+                    status: TableStatus.reserved,
+                    successMessage:
+                        'Đã chuyển ${table.tableNumber} thành đặt trước.',
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _updateStatusAndShowResult({
+    required BuildContext context,
+    required TableController controller,
+    required StaffTableModel table,
+    required TableStatus status,
+    required String successMessage,
+  }) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF9E3A14),
+          ),
+        );
+      },
+    );
+
+    final success = await controller.updateTableStatus(
+      tableId: table.id,
+      status: status,
+    );
+
+    if (!context.mounted) return;
+
+    Navigator.pop(context);
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -425,83 +625,51 @@ class TableManagementView extends StatelessWidget {
     );
   }
 
-  void _onTableMoreTapped(BuildContext context, dynamic table) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Lựa chọn cho bàn ${table.tableNumber}'),
-        duration: const Duration(seconds: 1),
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  List<_TableAlertItem> _buildMockAlertsForTable(StaffTableModel table) {
-    if (table.status == TableStatus.available) {
-      return const <_TableAlertItem>[];
-    }
-
-    final alerts = <_TableAlertItem>[
-      _TableAlertItem(
-        id: 'payment-${table.id}',
-        title: 'Y\u00eau c\u1ea7u thanh to\u00e1n',
-        message: 'T\u00f4i c\u1ea7n thanh to\u00e1n h\u00f3a \u0111\u01a1n.',
-        timeLabel: _buildAlertTimeLabel(table.id, 0),
-        icon: Icons.payments_outlined,
-        accentColor: const Color(0xFFB63F1D),
-        type: _TableAlertType.payment,
-        primaryActionLabel: 'X\u00e1c nh\u1eadn',
-        secondaryActionLabel: 'B\u1ecf qua',
-      ),
-    ];
-
-    if (table.hasAlert || table.id.isOdd) {
-      alerts.add(
-        _TableAlertItem(
-          id: 'support-${table.id}',
-          title: 'G\u1ecdi nh\u00e2n vi\u00ean',
-          message:
-              'L\u00e0m \u01a1n cho t\u00f4i th\u00eam n\u01b0\u1edbc s\u1ed1t v\u00e0 m\u1ed9t \u00edt \u1edbt t\u01b0\u01a1i, c\u1ea3m \u01a1n.',
-          timeLabel: _buildAlertTimeLabel(table.id, 1),
-          icon: Icons.notifications_active_outlined,
-          accentColor: const Color(0xFF4A4F5A),
-          type: _TableAlertType.support,
-          status: _TableAlertStatus.processing,
-          primaryActionLabel: 'Nh\u1eadn x\u1eed l\u00fd',
-          secondaryActionLabel: 'B\u1ecf qua',
-        ),
-      );
-    }
-
-    if (table.id % 3 == 0) {
-      alerts.add(
-        _TableAlertItem(
-          id: 'dish-${table.id}',
-          title: 'Y\u00eau c\u1ea7u m\u00f3n th\u00eam',
-          message:
-              'Cho b\u00e0n t\u00f4i g\u1ecdi th\u00eam 1 ph\u1ea7n salad.',
-          timeLabel: _buildAlertTimeLabel(table.id, 2),
-          icon: Icons.restaurant_menu_rounded,
-          accentColor: const Color(0xFF6F4D1C),
-          type: _TableAlertType.extraDish,
-          primaryActionLabel: '\u0110\u00e3 nh\u1eadn',
-          secondaryActionLabel: 'B\u1ecf qua',
-        ),
-      );
-    }
-
-    return alerts;
+  String _getStatusLabel(TableStatus status) {
+    return switch (status) {
+      TableStatus.available => 'Bàn trống',
+      TableStatus.occupied => 'Bàn có khách',
+      TableStatus.reserved => 'Đặt trước',
+    };
   }
 
-  String _buildAlertTimeLabel(int tableId, int step) {
-    final hour = 18 + ((tableId + step) % 2);
-    final minute = ((tableId * 7) + (step * 13)) % 60;
-    final paddedHour = hour.toString().padLeft(2, '0');
-    final paddedMinute = minute.toString().padLeft(2, '0');
-    return '$paddedHour:$paddedMinute:00';
-  }
+  void _showSearchDialog(
+    BuildContext context,
+    TableController controller,
+  ) {
+    final textController = TextEditingController(
+      text: controller.searchQuery.value,
+    );
 
-  // Display Search Dialog
-  void _showSearchDialog(BuildContext context, TableController controller) {
-    final textController = TextEditingController(text: controller.searchQuery.value);
     showDialog(
       context: context,
       builder: (context) {
@@ -553,36 +721,51 @@ class TableManagementView extends StatelessWidget {
       ),
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'Chọn Khu Vực',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          child: Obx(
+            () => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Chọn Khu Vực',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              ...areas.map((area) => ListTile(
-                    title: Text(area, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Divider(height: 1),
+                ...areas.map(
+                  (area) => ListTile(
+                    title: Text(
+                      area,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     trailing: controller.selectedArea.value == area
-                        ? const Icon(Icons.check, color: Color(0xFF9E3A14))
+                        ? const Icon(
+                            Icons.check,
+                            color: Color(0xFF9E3A14),
+                          )
                         : null,
                     onTap: () {
                       controller.changeArea(area);
                       Navigator.pop(context);
                     },
-                  )),
-            ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  // Display Filter selection sheet
-  void _showFilterTypeSelection(BuildContext context, TableController controller) {
+  void _showFilterTypeSelection(
+    BuildContext context,
+    TableController controller,
+  ) {
     final filters = ['Tất cả', 'Bàn trống', 'Bàn có khách', 'Đặt trước'];
 
     showModalBottomSheet(
@@ -592,28 +775,41 @@ class TableManagementView extends StatelessWidget {
       ),
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'Lọc theo trạng thái',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          child: Obx(
+            () => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Lọc theo trạng thái',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              ...filters.map((filter) => ListTile(
-                    title: Text(filter, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Divider(height: 1),
+                ...filters.map(
+                  (filter) => ListTile(
+                    title: Text(
+                      filter,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     trailing: controller.selectedFilterType.value == filter
-                        ? const Icon(Icons.check, color: Color(0xFF9E3A14))
+                        ? const Icon(
+                            Icons.check,
+                            color: Color(0xFF9E3A14),
+                          )
                         : null,
                     onTap: () {
                       controller.changeFilterType(filter);
                       Navigator.pop(context);
                     },
-                  )),
-            ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
