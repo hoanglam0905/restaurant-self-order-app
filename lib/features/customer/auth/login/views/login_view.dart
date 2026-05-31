@@ -3,9 +3,11 @@ import 'package:get/get.dart';
 
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/widgets/app_cta_button.dart';
 import '../../../../../core/widgets/app_inline_text_link.dart';
-import '../../../home/views/home_view.dart';
+import '../../../../../core/widgets/app_labeled_auth_text_field.dart';
 import '../../../../staff/staff_navigation_shell.dart';
+import '../../../home/views/home_view.dart';
 import '../../data/models/auth_response_model.dart';
 import '../../password_reset/views/forgot_password_view.dart';
 import '../../register/views/register_view.dart';
@@ -68,13 +70,10 @@ class _LoginViewState extends State<LoginView> {
                     ),
                     const SizedBox(height: 24),
                     LoginSocialSection(
-                      onGoogle: () => _showPendingAction(
-                        context,
-                        'Đăng nhập Google cần luồng idToken.',
-                      ),
+                      onGoogle: () => _showGoogleIdTokenDialog(context),
                       onFacebook: () => _showPendingAction(
                         context,
-                        'Đăng nhập Facebook chưa có contract backend.',
+                        'Backend chua co API dang nhap Facebook.',
                       ),
                     ),
                     const SizedBox(height: 56),
@@ -100,6 +99,115 @@ class _LoginViewState extends State<LoginView> {
       return;
     }
 
+    _navigateAfterAuth(context, auth);
+  }
+
+  Future<void> _showGoogleIdTokenDialog(BuildContext context) async {
+    final idTokenController = TextEditingController();
+    _controller.socialErrorMessage.value = '';
+
+    final auth = await showDialog<AuthResponseModel>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: const Text(
+            'Google staff login',
+            style: TextStyle(
+              color: Color(0xFF2D1D18),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Backend hien chi co API /auth/staff/google-login va can Google ID token.',
+                style: TextStyle(
+                  color: Color(0xFF5D5E61),
+                  fontSize: 14,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              AppLabeledAuthTextField(
+                label: 'Google ID token',
+                controller: idTokenController,
+                hintText: 'eyJhbGciOi...',
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) =>
+                    _submitGoogleIdToken(dialogContext, idTokenController.text),
+              ),
+              Obx(() {
+                if (_controller.socialErrorMessage.value.isEmpty) {
+                  return const SizedBox(height: 16);
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 4),
+                  child: Text(
+                    _controller.socialErrorMessage.value,
+                    style: const TextStyle(
+                      color: Color(0xFFCC2B00),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+              Obx(
+                () => AppCtaButton(
+                  label: _controller.isSocialLoading.value
+                      ? 'Dang dang nhap...'
+                      : 'Dang nhap Google',
+                  onPressed: () =>
+                      _submitGoogleIdToken(dialogContext, idTokenController.text),
+                  enabled: !_controller.isSocialLoading.value,
+                  height: 48,
+                  borderRadius: 8,
+                  fontSize: 16,
+                  backgroundColor: const Color(0xFFA73413),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: AppInlineTextLink(
+                  label: 'Huy',
+                  onTap: () => Navigator.pop(dialogContext),
+                  textColor: const Color(0xFFA73413),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    idTokenController.dispose();
+    if (!context.mounted || auth == null) {
+      return;
+    }
+
+    _navigateAfterAuth(context, auth);
+  }
+
+  Future<void> _submitGoogleIdToken(
+    BuildContext dialogContext,
+    String idToken,
+  ) async {
+    final auth = await _controller.submitStaffGoogleIdToken(idToken);
+    if (!dialogContext.mounted || auth == null) {
+      return;
+    }
+
+    Navigator.pop(dialogContext, auth);
+  }
+
+  void _navigateAfterAuth(BuildContext context, AuthResponseModel auth) {
     final destination = _destinationFor(auth);
     Navigator.pushAndRemoveUntil(
       context,
@@ -139,11 +247,11 @@ class _RegisterPrompt extends StatelessWidget {
       spacing: 4,
       children: [
         const Text(
-          'Chưa có tài khoản?',
+          'Chua co tai khoan?',
           style: TextStyle(color: Color(0xFF5D5E61), fontSize: 16, height: 1.5),
         ),
         AppInlineTextLink(
-          label: 'Đăng ký',
+          label: 'Dang ky',
           onTap: onRegister,
           textColor: const Color(0xFFA73413),
           fontSize: 16,

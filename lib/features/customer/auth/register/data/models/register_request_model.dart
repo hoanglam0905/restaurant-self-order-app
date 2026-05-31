@@ -3,14 +3,14 @@ class RegisterRequestModel {
     required this.username,
     required this.email,
     required this.password,
-    required this.fullname,
+    required this.fullName,
     this.phone,
   });
 
   final String username;
   final String email;
   final String password;
-  final String fullname;
+  final String fullName;
   final String? phone;
 
   Map<String, dynamic> toJson() {
@@ -19,7 +19,7 @@ class RegisterRequestModel {
       'email': email,
       'password': password,
       'phone': phone,
-      'fullname': fullname,
+      'fullname': fullName,
     };
   }
 }

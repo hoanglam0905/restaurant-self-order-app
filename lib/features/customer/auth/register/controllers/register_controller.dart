@@ -22,6 +22,7 @@ class RegisterController extends GetxController {
 
   final RxBool isLoading = false.obs;
   final RxBool isVerifyingOtp = false.obs;
+  final RxBool isResendingOtp = false.obs;
   final RxBool obscurePassword = true.obs;
   final RxBool obscureConfirmPassword = true.obs;
   final RxString errorMessage = ''.obs;
@@ -41,24 +42,24 @@ class RegisterController extends GetxController {
   }
 
   Future<AuthResponseModel?> submit() async {
-    final fullname = fullNameTextController.text.trim();
+    final fullName = fullNameTextController.text.trim();
     final email = emailTextController.text.trim();
     final phone = phoneTextController.text.trim();
     final password = passwordTextController.text;
     final confirmPassword = confirmPasswordTextController.text;
 
-    if (fullname.isEmpty || email.isEmpty || password.isEmpty) {
-      errorMessage.value = 'Vui lòng nhập họ tên, email và mật khẩu.';
+    if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
+      errorMessage.value = 'Vui long nhap ho ten, email va mat khau.';
       return null;
     }
 
     if (password.length < 8) {
-      errorMessage.value = 'Mật khẩu phải có ít nhất 8 ký tự.';
+      errorMessage.value = 'Mat khau phai co it nhat 8 ky tu.';
       return null;
     }
 
     if (password != confirmPassword) {
-      errorMessage.value = 'Mật khẩu xác nhận chưa khớp.';
+      errorMessage.value = 'Mat khau xac nhan chua khop.';
       return null;
     }
 
@@ -72,14 +73,14 @@ class RegisterController extends GetxController {
           email: email,
           password: password,
           phone: phone.isEmpty ? null : phone,
-          fullname: fullname,
+          fullName: fullName,
         ),
       );
     } on RegisterException catch (error) {
       errorMessage.value = error.message;
       return null;
     } catch (_) {
-      errorMessage.value = 'Không thể đăng ký.';
+      errorMessage.value = 'Khong the dang ky.';
       return null;
     } finally {
       isLoading.value = false;
@@ -91,7 +92,7 @@ class RegisterController extends GetxController {
     final otp = otpTextController.text.trim();
 
     if (otp.isEmpty) {
-      otpErrorMessage.value = 'Vui lòng nhập mã OTP.';
+      otpErrorMessage.value = 'Vui long nhap ma OTP.';
       return null;
     }
 
@@ -106,10 +107,34 @@ class RegisterController extends GetxController {
       otpErrorMessage.value = error.message;
       return null;
     } catch (_) {
-      otpErrorMessage.value = 'Không thể xác thực OTP.';
+      otpErrorMessage.value = 'Khong the xac thuc OTP.';
       return null;
     } finally {
       isVerifyingOtp.value = false;
+    }
+  }
+
+  Future<bool> resendRegisterOtp() async {
+    final email = emailTextController.text.trim();
+    if (email.isEmpty) {
+      otpErrorMessage.value = 'Email dang ky khong hop le.';
+      return false;
+    }
+
+    isResendingOtp.value = true;
+    otpErrorMessage.value = '';
+
+    try {
+      await _registerService.resendRegisterOtp(email);
+      return true;
+    } on RegisterException catch (error) {
+      otpErrorMessage.value = error.message;
+      return false;
+    } catch (_) {
+      otpErrorMessage.value = 'Khong the gui lai OTP.';
+      return false;
+    } finally {
+      isResendingOtp.value = false;
     }
   }
 

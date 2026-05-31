@@ -19,6 +19,7 @@ class RegisterService {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/auth/customer/register',
         data: request.toJson(),
+        options: Options(extra: const {'skipAuth': true}),
       );
 
       return AuthResponseModel.fromJson(response.data ?? {});
@@ -27,7 +28,7 @@ class RegisterService {
     } on RegisterException {
       rethrow;
     } catch (_) {
-      throw const RegisterException('Không thể đăng ký.');
+      throw const RegisterException('Khong the dang ky.');
     }
   }
 
@@ -38,12 +39,13 @@ class RegisterService {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/auth/customer/verify-register-otp',
         data: request.toJson(),
+        options: Options(extra: const {'skipAuth': true}),
       );
       final auth = AuthResponseModel.fromJson(response.data ?? {});
 
       if (auth.accessToken.isEmpty || auth.refreshToken.isEmpty) {
         throw const RegisterException(
-          'Máy chủ chưa trả về token hợp lệ sau khi xác thực OTP.',
+          'May chu chua tra ve token hop le sau khi xac thuc OTP.',
         );
       }
 
@@ -58,23 +60,35 @@ class RegisterService {
     } on RegisterException {
       rethrow;
     } catch (_) {
-      throw const RegisterException('Không thể xác thực OTP.');
+      throw const RegisterException('Khong the xac thuc OTP.');
+    }
+  }
+
+  Future<void> resendRegisterOtp(String email) async {
+    try {
+      await _apiClient.dio.post<void>(
+        '/auth/customer/resend-register-otp',
+        queryParameters: {'email': email},
+        options: Options(extra: const {'skipAuth': true}),
+      );
+    } on DioException catch (error) {
+      throw RegisterException(_messageFromDio(error));
+    } catch (_) {
+      throw const RegisterException('Khong the gui lai OTP.');
     }
   }
 
   String _messageFromDio(DioException error) {
-    return switch (error.type) {
-      DioExceptionType.connectionTimeout ||
-      DioExceptionType.sendTimeout ||
-      DioExceptionType.receiveTimeout =>
-        'Máy chủ đang phản hồi chậm. Vui lòng thử lại sau ít phút.',
-      DioExceptionType.connectionError =>
-        'Không thể kết nối đến máy chủ nhà hàng. Vui lòng kiểm tra mạng.',
-      _ => _messageFromStatusCode(error),
-    };
-  }
+    if (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return 'May chu dang phan hoi cham. Vui long thu lai sau it phut.';
+    }
 
-  String _messageFromStatusCode(DioException error) {
+    if (error.type == DioExceptionType.connectionError) {
+      return 'Khong the ket noi den may chu nha hang. Vui long kiem tra mang.';
+    }
+
     final serverMessage = _serverMessage(error.response?.data);
     if (serverMessage != null && serverMessage.isNotEmpty) {
       return serverMessage;
@@ -82,13 +96,13 @@ class RegisterService {
 
     final statusCode = error.response?.statusCode;
     return switch (statusCode) {
-      400 => 'Thông tin đăng ký hoặc OTP không hợp lệ.',
-      401 => 'Phiên đăng ký không hợp lệ.',
-      403 => 'Bạn không có quyền tạo tài khoản này.',
-      404 => 'Không tìm thấy dịch vụ đăng ký.',
-      409 => 'Email hoặc tên đăng nhập đã tồn tại.',
-      500 => 'Máy chủ chưa thể xử lý đăng ký.',
-      _ => 'Không thể kết nối đến máy chủ nhà hàng.',
+      400 => 'Thong tin dang ky hoac OTP khong hop le.',
+      401 => 'Phien dang ky khong hop le.',
+      403 => 'Ban khong co quyen tao tai khoan nay.',
+      404 => 'Khong tim thay dich vu dang ky.',
+      409 => 'Email hoac ten dang nhap da ton tai.',
+      500 => 'May chu chua the xu ly dang ky.',
+      _ => 'Khong the ket noi den may chu nha hang.',
     };
   }
 
