@@ -1,27 +1,28 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../../../../../core/config/api_config.dart';
+import '../../../../../core/storage/token_storage.dart';
 import '../models/staff_kitchen_order_model.dart';
 
 class KitchenService {
   KitchenService({
-    this.graphqlUrl = 'http://localhost:8081/graphql',
-  });
+    this.graphqlUrl = ApiConfig.graphqlUrl,
+    TokenStorage? tokenStorage,
+  }) : _tokenStorage = tokenStorage ?? TokenStorage();
 
   final String graphqlUrl;
+  final TokenStorage _tokenStorage;
 
-  // Chỉ hard-code để test local. Không push token lên Git.
-  static const String staffToken = String.fromEnvironment(
-  'STAFF_TOKEN',
-  defaultValue: '',
-);
+  Future<Map<String, String>> _headers() async {
+    final accessToken = await _tokenStorage.readAccessToken();
 
-Map<String, String> get _headers {
-  return {
-    'Content-Type': 'application/json',
-    if (staffToken.isNotEmpty) 'Authorization': 'Bearer $staffToken',
-  };
-}
+    return {
+      'Content-Type': 'application/json',
+      if (accessToken != null && accessToken.isNotEmpty)
+        'Authorization': 'Bearer $accessToken',
+    };
+  }
 
   Future<List<StaffKitchenOrderModel>> getKitchenOrders() async {
     const query = '''
@@ -47,7 +48,7 @@ Map<String, String> get _headers {
 
     final response = await http.post(
       Uri.parse(graphqlUrl),
-      headers: _headers,
+      headers: await _headers(),
       body: jsonEncode({
         'query': query,
       }),
@@ -95,7 +96,7 @@ Map<String, String> get _headers {
 
     final response = await http.post(
       Uri.parse(graphqlUrl),
-      headers: _headers,
+      headers: await _headers(),
       body: jsonEncode({
         'query': mutation,
         'variables': {
