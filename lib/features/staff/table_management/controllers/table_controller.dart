@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+
 import '../data/models/staff_table_model.dart';
 import '../data/models/table_status.dart';
 import '../data/services/table_service.dart';
@@ -11,9 +12,9 @@ class TableController extends GetxController {
 
   final RxList<StaffTableModel> tables = <StaffTableModel>[].obs;
   final RxBool isLoading = false.obs;
+  final RxBool isActionLoading = false.obs;
   final RxString errorMessage = ''.obs;
 
-  // Selected filters
   final RxString selectedArea = 'Sảnh'.obs;
   final RxString selectedFilterType = 'Tất cả'.obs;
   final RxString searchQuery = ''.obs;
@@ -27,6 +28,7 @@ class TableController extends GetxController {
   Future<void> loadTables() async {
     isLoading.value = true;
     errorMessage.value = '';
+
     try {
       final fetchedTables = await _tableService.getTables();
       tables.assignAll(fetchedTables);
@@ -37,9 +39,68 @@ class TableController extends GetxController {
     }
   }
 
-  // Summary Metrics
+  Future<StaffTableModel?> getTableDetail(int tableId) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      return await _tableService.getTableById(tableId);
+    } catch (e) {
+      errorMessage.value = e.toString();
+      return null;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
+  Future<bool> updateTableStatus({
+    required int tableId,
+    required TableStatus status,
+  }) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      await _tableService.updateTableStatus(
+        tableId: tableId,
+        status: status.toJson(),
+      );
+
+      await loadTables();
+      return true;
+    } catch (e) {
+      errorMessage.value = e.toString();
+      return false;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
+  Future<bool> swapTables({
+    required int tableNumberA,
+    required int tableNumberB,
+  }) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      await _tableService.swapTables(
+        tableNumberA: tableNumberA,
+        tableNumberB: tableNumberB,
+      );
+
+      await loadTables();
+      return true;
+    } catch (e) {
+      errorMessage.value = e.toString();
+      return false;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
   int get totalTablesCount => tables.length;
-  
+
   int get occupiedTablesCount =>
       tables.where((t) => t.status == TableStatus.occupied).length;
 
@@ -56,33 +117,31 @@ class TableController extends GetxController {
     return ((emptyTablesCount / totalTablesCount) * 100).round();
   }
 
-  // Filtered Tables
   List<StaffTableModel> get filteredTables {
     return tables.where((table) {
-      // 1. Filter by search query (e.g. "T-01" or "1")
       if (searchQuery.value.isNotEmpty) {
         final query = searchQuery.value.toLowerCase();
         final matchName = table.tableNumber.toLowerCase().contains(query);
         final matchId = table.id.toString().contains(query);
+
         if (!matchName && !matchId) return false;
       }
 
-      // 2. Filter by status type
       if (selectedFilterType.value == 'Bàn trống' &&
           table.status != TableStatus.available) {
         return false;
       }
+
       if (selectedFilterType.value == 'Bàn có khách' &&
           table.status != TableStatus.occupied) {
         return false;
       }
+
       if (selectedFilterType.value == 'Đặt trước' &&
           table.status != TableStatus.reserved) {
         return false;
       }
 
-      // 3. Filter by Area (for mock realism, let's say odd IDs are in Sảnh, even IDs in VIP/etc. if needed)
-      // For now, we show all since it's a mock representation matching the exact image
       return true;
     }).toList();
   }
@@ -99,4 +158,3 @@ class TableController extends GetxController {
     searchQuery.value = query;
   }
 }
-
