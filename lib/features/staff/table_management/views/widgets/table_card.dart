@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../data/models/staff_table_model.dart';
 import '../../data/models/table_status.dart';
 
@@ -15,19 +16,16 @@ class TableCard extends StatelessWidget {
     final isReserved = table.status == TableStatus.reserved;
     final isActive = isOccupied || isReserved;
 
-    // Aesthetic Color tokens matching the mockup
     const occupiedBorderColor = Color(0xFF9E3A14);
     const occupiedTextColor = Color(0xFF9E3A14);
-    // A73413 with 5% opacity for occupied background
-    const occupiedBgColor = Color(0x0DA73413); // 0x0D = ~5% of 255
+    const occupiedBgColor = Color(0x0DA73413);
     const reservedBorderColor = Color(0xFFE6A817);
     const reservedTextColor = Color(0xFFB8860B);
-    const reservedBgColor = Color(0x0DE6A817); // 5% opacity amber
+    const reservedBgColor = Color(0x0DE6A817);
     const emptyBgColor = Color(0xFFF4F6FA);
     const emptyTextColor = Color(0xFF8A9AAB);
     const emptyIconColor = Color(0xFFD0DCE7);
 
-    // Pick colors based on state
     final borderColor = isOccupied
         ? occupiedBorderColor
         : isReserved
@@ -47,7 +45,6 @@ class TableCard extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // Main Card body
         GestureDetector(
           onTap: onTap,
           child: Container(
@@ -66,11 +63,10 @@ class TableCard extends StatelessWidget {
                   : null,
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top Row: Table Name & Capacity
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -105,8 +101,6 @@ class TableCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 6),
-
-                  // Middle Content: Status & Progress
                   if (isOccupied) ...[
                     const Text(
                       'BÀN CÓ KHÁCH',
@@ -128,8 +122,6 @@ class TableCard extends StatelessWidget {
                         ),
                       ),
                     const Spacer(),
-
-                    // Bottom Row: Time and Action menu
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -196,8 +188,6 @@ class TableCard extends StatelessWidget {
             ),
           ),
         ),
-
-        // Overlapping red Alert Badge on occupied tables with notifications
         if (isOccupied && table.hasAlert)
           Positioned(
             top: -8,
@@ -205,7 +195,7 @@ class TableCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
-                color: Color(0xFFC62828), // Deep Alert Red
+                color: Color(0xFFC62828),
                 shape: BoxShape.circle,
               ),
               child: const Text(
@@ -218,8 +208,6 @@ class TableCard extends StatelessWidget {
               ),
             ),
           ),
-
-        // Amber clock icon for reserved tables
         if (isReserved)
           Positioned(
             top: -8,
@@ -237,8 +225,6 @@ class TableCard extends StatelessWidget {
               ),
             ),
           ),
-
-        // Notification action in bottom-right corner for every table
         Positioned(
           right: 10,
           bottom: 10,
