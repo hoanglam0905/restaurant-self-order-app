@@ -8,7 +8,8 @@ class AuthResponseModel {
     this.staffId,
     this.customerId,
     this.points,
-    this.fullname,
+    this.fullName,
+    this.message,
   });
 
   final String accessToken;
@@ -19,7 +20,8 @@ class AuthResponseModel {
   final int? staffId;
   final int? customerId;
   final int? points;
-  final String? fullname;
+  final String? fullName;
+  final String? message;
 
   factory AuthResponseModel.fromJson(Map<String, dynamic> json) {
     return AuthResponseModel(
@@ -31,7 +33,8 @@ class AuthResponseModel {
       staffId: (json['staffId'] as num?)?.toInt(),
       customerId: (json['customerId'] as num?)?.toInt(),
       points: (json['points'] as num?)?.toInt(),
-      fullname: json['fullname'] as String?,
+      fullName: json['fullname'] as String?,
+      message: json['message'] as String?,
     );
   }
 }

@@ -10,8 +10,9 @@ class ApiClient {
           Dio(
             BaseOptions(
               baseUrl: ApiConfig.baseUrl,
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 10),
+              connectTimeout: const Duration(seconds: 45),
+              sendTimeout: const Duration(seconds: 45),
+              receiveTimeout: const Duration(seconds: 60),
               responseType: ResponseType.json,
             ),
           ),
@@ -19,6 +20,11 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          if (options.extra['skipAuth'] == true) {
+            handler.next(options);
+            return;
+          }
+
           final token = await _tokenStorage.readAccessToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';

@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 import '../../../../../core/config/api_config.dart';
 import '../../../../../core/network/api_client.dart';
 import '../models/order_detail_model.dart';
+import '../models/payment_process_result_model.dart';
+import '../models/vnpay_payment_model.dart';
 
 class OrderDetailService {
   const OrderDetailService(this._apiClient);
@@ -34,7 +36,7 @@ query OrderDetail($orderId: ID!) {
   Future<OrderDetailModel> getOrderDetail(int orderId) async {
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
-        '${ApiConfig.backendOrigin}/graphql',
+        ApiConfig.graphqlUrl,
         data: {
           'query': _orderQuery,
           'variables': {'orderId': orderId.toString()},
@@ -57,13 +59,75 @@ query OrderDetail($orderId: ID!) {
     } on OrderDetailException {
       rethrow;
     } on DioException catch (error) {
-      throw OrderDetailException(_messageFromDio(error));
+      throw OrderDetailException(_orderMessageFromDio(error));
     } catch (_) {
       throw const OrderDetailException('Không thể tải đơn hàng.');
     }
   }
 
-  String _messageFromDio(DioException error) {
+  Future<PaymentProcessResultModel> processPayment({
+    required OrderDetailModel order,
+    required String paymentMethod,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/payment/process',
+        data: {
+          'orderId': order.orderId,
+          'paymentMethod': paymentMethod,
+          'amount': order.totalAmount,
+          'confirmPayment': true,
+          'pointsToUse': 0,
+        },
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return PaymentProcessResultModel.fromJson(data);
+      }
+      throw const OrderDetailException('Không thể xử lý thanh toán.');
+    } on OrderDetailException {
+      rethrow;
+    } on DioException catch (error) {
+      throw OrderDetailException(_paymentMessageFromDio(error));
+    } catch (_) {
+      throw const OrderDetailException('Không thể xử lý thanh toán.');
+    }
+  }
+
+  Future<VNPayPaymentModel> createVNPayPayment(OrderDetailModel order) async {
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/payment/vnpay',
+        data: {
+          'total': order.totalAmount.round(),
+          'orderInfo': 'Payment for Order: ${order.orderId}',
+          'returnUrl': '${ApiConfig.baseUrl}/payment/vnpay_payment',
+          'orderId': order.orderId,
+          'pointsToUse': 0,
+        },
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        final payment = VNPayPaymentModel.fromJson(data);
+        if (payment.paymentUrl.trim().isEmpty) {
+          throw const OrderDetailException('Backend chưa trả link VNPay.');
+        }
+        return payment;
+      }
+
+      throw const OrderDetailException('Không thể tạo thanh toán VNPay.');
+    } on OrderDetailException {
+      rethrow;
+    } on DioException catch (error) {
+      throw OrderDetailException(_paymentMessageFromDio(error));
+    } catch (_) {
+      throw const OrderDetailException('Không thể tạo thanh toán VNPay.');
+    }
+  }
+
+  String _orderMessageFromDio(DioException error) {
     final statusCode = error.response?.statusCode;
     return switch (statusCode) {
       400 => 'Thông tin đơn hàng chưa hợp lệ.',
@@ -71,6 +135,31 @@ query OrderDetail($orderId: ID!) {
       403 => 'Bạn không có quyền xem đơn hàng này.',
       404 => 'Không tìm thấy đơn hàng.',
       500 => 'Máy chủ chưa thể tải đơn hàng.',
+      _ => 'Không thể kết nối đến máy chủ nhà hàng.',
+    };
+  }
+
+  String _paymentMessageFromDio(DioException error) {
+    final data = error.response?.data;
+    if (data is Map<String, dynamic>) {
+      final message = data['message']?.toString();
+      if (message != null && message.trim().isNotEmpty) {
+        return message;
+      }
+    }
+
+    if (data is String && data.trim().isNotEmpty) {
+      return data;
+    }
+
+    final statusCode = error.response?.statusCode;
+    return switch (statusCode) {
+      400 => 'Thông tin thanh toán chưa hợp lệ.',
+      401 => 'Vui lòng đăng nhập lại trước khi thanh toán.',
+      403 => 'Bạn không có quyền thanh toán đơn hàng này.',
+      404 => 'Không tìm thấy đơn hàng cần thanh toán.',
+      409 => 'Đơn hàng này đã được thanh toán.',
+      500 => 'Máy chủ chưa thể xử lý thanh toán.',
       _ => 'Không thể kết nối đến máy chủ nhà hàng.',
     };
   }

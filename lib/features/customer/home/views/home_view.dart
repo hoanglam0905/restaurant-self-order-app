@@ -103,7 +103,7 @@ class _HomeViewState extends State<HomeView> {
   }
 
   Future<void> _openOrderMenu(BuildContext context) async {
-    const tableId = 6;
+    const tableId = 3;
     const tableLabel = HomeController.tableCode;
     await TableSessionStorage().saveTableSession(
       tableId: tableId,

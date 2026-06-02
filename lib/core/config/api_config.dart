@@ -5,7 +5,8 @@ class ApiConfig {
 
   // REST API
   static const String baseUrl = '$backendRoot/api';
-  static const String backendOrigin = '$backendRoot/api';
+
+  static const String backendOrigin = backendRoot;
 
   // GraphQL API
   static const String graphqlUrl = '$backendRoot/graphql';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../data/models/auth_response_model.dart';
+import '../data/models/google_login_request_model.dart';
 import '../data/models/login_request_model.dart';
 import '../data/services/login_service.dart';
 
@@ -15,9 +16,11 @@ class LoginController extends GetxController {
   final TextEditingController passwordTextController = TextEditingController();
 
   final RxBool isLoading = false.obs;
+  final RxBool isSocialLoading = false.obs;
   final RxBool rememberMe = false.obs;
   final RxBool obscurePassword = true.obs;
   final RxString errorMessage = ''.obs;
+  final RxString socialErrorMessage = ''.obs;
 
   void toggleRememberMe(bool value) {
     rememberMe.value = value;
@@ -51,6 +54,31 @@ class LoginController extends GetxController {
       return null;
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<AuthResponseModel?> submitStaffGoogleIdToken(String idToken) async {
+    final trimmedIdToken = idToken.trim();
+    if (trimmedIdToken.isEmpty) {
+      socialErrorMessage.value = 'Vui long nhap Google ID token.';
+      return null;
+    }
+
+    isSocialLoading.value = true;
+    socialErrorMessage.value = '';
+
+    try {
+      return await _loginService.staffGoogleLogin(
+        GoogleLoginRequestModel(idToken: trimmedIdToken),
+      );
+    } on LoginException catch (error) {
+      socialErrorMessage.value = error.message;
+      return null;
+    } catch (_) {
+      socialErrorMessage.value = 'Khong the dang nhap bang Google.';
+      return null;
+    } finally {
+      isSocialLoading.value = false;
     }
   }
 

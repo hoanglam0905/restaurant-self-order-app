@@ -4,12 +4,14 @@ class OrderRequestModel {
   const OrderRequestModel({
     required this.tableId,
     required this.items,
+    this.customerId,
     this.customerName,
     this.notes,
   });
 
   final int tableId;
   final List<OrderItemRequestModel> items;
+  final int? customerId;
   final String? customerName;
   final String? notes;
 
@@ -17,6 +19,7 @@ class OrderRequestModel {
     return {
       'tableId': tableId,
       'items': items.map((item) => item.toJson()).toList(),
+      if (customerId != null) 'customerId': customerId,
       if (customerName != null && customerName!.trim().isNotEmpty)
         'customerName': customerName!.trim(),
       if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
