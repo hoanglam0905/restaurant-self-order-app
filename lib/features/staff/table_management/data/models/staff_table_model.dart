@@ -32,7 +32,7 @@ class StaffTableModel {
 
     if (statusVal == TableStatus.occupied) {
       alert = tableId == 1 || tableId == 4 || tableId == 8;
-      progress = '8/15 Mon';
+      progress = '8/15 Món';
       activeTime = switch (tableId) {
         1 => '45m active',
         3 => '1h 10m active',
