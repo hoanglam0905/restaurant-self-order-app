@@ -1,18 +1,24 @@
 import 'package:dio/dio.dart';
 
 import '../../../../../../core/network/api_client.dart';
+import '../../../../../../core/storage/auth_session_storage.dart';
 import '../../../../../../core/storage/token_storage.dart';
 import '../../../data/models/auth_response_model.dart';
 import '../models/register_request_model.dart';
 import '../models/verify_register_otp_request_model.dart';
 
 class RegisterService {
-  RegisterService({required ApiClient apiClient, TokenStorage? tokenStorage})
-    : _apiClient = apiClient,
-      _tokenStorage = tokenStorage ?? TokenStorage();
+  RegisterService({
+    required ApiClient apiClient,
+    TokenStorage? tokenStorage,
+    AuthSessionStorage? authSessionStorage,
+  }) : _apiClient = apiClient,
+       _tokenStorage = tokenStorage ?? TokenStorage(),
+       _authSessionStorage = authSessionStorage ?? AuthSessionStorage();
 
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
+  final AuthSessionStorage _authSessionStorage;
 
   Future<AuthResponseModel> register(RegisterRequestModel request) async {
     try {
@@ -52,6 +58,11 @@ class RegisterService {
       await _tokenStorage.saveTokens(
         accessToken: auth.accessToken,
         refreshToken: auth.refreshToken,
+      );
+      await _authSessionStorage.saveAuthProfile(
+        userType: auth.userType,
+        customerId: auth.customerId,
+        customerName: auth.fullName,
       );
 
       return auth;

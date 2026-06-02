@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../../../core/storage/auth_session_storage.dart';
 import '../../home/data/models/dish_model.dart';
 import '../../home/data/models/dish_status.dart';
 import '../../home/data/services/home_dish_service.dart';
@@ -15,14 +16,17 @@ class RestaurantMenuController extends GetxController {
     required HomeDishService dishService,
     required MenuOrderService orderService,
     required RestaurantMenuMode mode,
+    AuthSessionStorage? authSessionStorage,
     this.tableId,
     this.tableLabel,
   }) : _dishService = dishService,
        _orderService = orderService,
+       _authSessionStorage = authSessionStorage ?? AuthSessionStorage(),
        mode = mode.obs;
 
   final HomeDishService _dishService;
   final MenuOrderService _orderService;
+  final AuthSessionStorage _authSessionStorage;
   final int? tableId;
   final String? tableLabel;
   final Rx<RestaurantMenuMode> mode;
@@ -179,10 +183,12 @@ class RestaurantMenuController extends GetxController {
     errorMessage.value = '';
 
     try {
+      final customerSession = await _authSessionStorage.readCustomerSession();
       final orderId = await _orderService.createOrder(
         OrderRequestModel(
           tableId: tableId!,
-          customerName: tableLabel == null ? null : 'Table $tableLabel',
+          customerId: customerSession?.customerId,
+          customerName: customerSession == null ? _guestCustomerName : null,
           items: items,
         ),
       );
@@ -199,6 +205,14 @@ class RestaurantMenuController extends GetxController {
     } finally {
       isSubmitting.value = false;
     }
+  }
+
+  String get _guestCustomerName {
+    final normalizedTableLabel = tableLabel?.trim();
+    if (normalizedTableLabel == null || normalizedTableLabel.isEmpty) {
+      return 'Guest';
+    }
+    return 'Guest - Table $normalizedTableLabel';
   }
 
   @override

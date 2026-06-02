@@ -83,8 +83,8 @@ class _RegisterViewState extends State<RegisterView> {
   }
 
   Future<void> _submit(BuildContext context) async {
-    final registration = await _controller.submit();
-    if (!context.mounted || registration == null) {
+    final canContinue = _controller.startRegistration();
+    if (!context.mounted || !canContinue) {
       return;
     }
 

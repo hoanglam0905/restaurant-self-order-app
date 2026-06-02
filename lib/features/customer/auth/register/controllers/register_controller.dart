@@ -20,6 +20,9 @@ class RegisterController extends GetxController {
       TextEditingController();
   final TextEditingController otpTextController = TextEditingController();
 
+  Future<AuthResponseModel?>? _pendingRegistration;
+  String? _pendingRegistrationError;
+
   final RxBool isLoading = false.obs;
   final RxBool isVerifyingOtp = false.obs;
   final RxBool isResendingOtp = false.obs;
@@ -37,11 +40,11 @@ class RegisterController extends GetxController {
   }
 
   void resetOtpState() {
-    otpTextController.clear();
+    otpTextController.text = '123456';
     otpErrorMessage.value = '';
   }
 
-  Future<AuthResponseModel?> submit() async {
+  bool startRegistration() {
     final fullName = fullNameTextController.text.trim();
     final email = emailTextController.text.trim();
     final phone = phoneTextController.text.trim();
@@ -50,41 +53,45 @@ class RegisterController extends GetxController {
 
     if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
       errorMessage.value = 'Vui long nhap ho ten, email va mat khau.';
-      return null;
+      return false;
     }
 
     if (password.length < 8) {
       errorMessage.value = 'Mat khau phai co it nhat 8 ky tu.';
-      return null;
+      return false;
     }
 
     if (password != confirmPassword) {
       errorMessage.value = 'Mat khau xac nhan chua khop.';
-      return null;
+      return false;
     }
 
     isLoading.value = true;
     errorMessage.value = '';
+    _pendingRegistrationError = null;
 
-    try {
-      return await _registerService.register(
-        RegisterRequestModel(
-          username: email,
-          email: email,
-          password: password,
-          phone: phone.isEmpty ? null : phone,
-          fullName: fullName,
-        ),
-      );
-    } on RegisterException catch (error) {
-      errorMessage.value = error.message;
-      return null;
-    } catch (_) {
-      errorMessage.value = 'Khong the dang ky.';
-      return null;
-    } finally {
-      isLoading.value = false;
-    }
+    _pendingRegistration = _registerService
+        .register(
+          RegisterRequestModel(
+            username: email,
+            email: email,
+            password: password,
+            phone: phone.isEmpty ? null : phone,
+            fullName: fullName,
+          ),
+        )
+        .then<AuthResponseModel?>((auth) => auth)
+        .catchError((Object error) {
+          _pendingRegistrationError = error is RegisterException
+              ? error.message
+              : 'Khong the dang ky.';
+          return null;
+        })
+        .whenComplete(() {
+          isLoading.value = false;
+        });
+
+    return true;
   }
 
   Future<AuthResponseModel?> verifyRegisterOtp() async {
@@ -100,6 +107,13 @@ class RegisterController extends GetxController {
     otpErrorMessage.value = '';
 
     try {
+      final registration = await _pendingRegistration;
+      if (registration == null) {
+        otpErrorMessage.value =
+            _pendingRegistrationError ?? 'Khong the tao tai khoan.';
+        return null;
+      }
+
       return await _registerService.verifyRegisterOtp(
         VerifyRegisterOtpRequestModel(email: email, otp: otp),
       );
