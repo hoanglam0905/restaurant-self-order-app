@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 class OrderReservationView extends StatefulWidget {
   const OrderReservationView({super.key});
@@ -12,7 +12,6 @@ class _OrderReservationViewState extends State<OrderReservationView> {
   int _selectedTableIndex = 0;
   int _selectedCategoryIndex = 0;
   String _searchText = '';
-  bool _showDetails = false;
 
   final List<String> _tables = const ['T-01', 'T-02', 'T-03', 'T-04', 'T-05'];
   final List<String> _categories = const [
@@ -24,36 +23,40 @@ class _OrderReservationViewState extends State<OrderReservationView> {
 
   final List<_MenuItem> _menuItems = const <_MenuItem>[
     _MenuItem(
-      name: 'Cá Hồi Áp Chảo',
-      description: 'Sốt bơ chanh & măng tây',
-      category: 'Món chính',
-      price: 285000,
+      name: 'Salad Landaise',
+      description: 'Rau xanh & sốt đặc biệt',
+      note: 'Không hành, sốt để riêng',
+      category: 'Khai vị',
+      price: 185000,
       imageUrl:
-          'https://images.unsplash.com/photo-1485921325833-c519f76c4927?auto=format&fit=crop&w=900&q=80',
+          'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=900&q=80',
     ),
     _MenuItem(
-      name: 'Bò Wagyu Nướng',
-      description: 'Nấm truffle & khoai tây',
+      name: 'Magret De Canard',
+      description: 'Ức vịt áp chảo & sốt vang',
+      note: 'Tái vừa (Medium-rare)',
       category: 'Món chính',
-      price: 890000,
+      price: 295000,
       imageUrl:
           'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=900&q=80',
     ),
     _MenuItem(
-      name: 'Mousse Socola',
-      description: 'Dâu rừng & vụn vàng',
+      name: 'Fondant au Chocolat',
+      description: 'Socola nóng & kem vani',
+      note: 'Thêm 1 viên kem vani',
       category: 'Tráng miệng',
-      price: 145000,
+      price: 120000,
       imageUrl:
-          'https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=900&q=80',
+          'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=900&q=80',
     ),
     _MenuItem(
-      name: 'Salad Mùa Hè',
-      description: 'Rau hữu cơ & sốt balsamic',
-      category: 'Khai vị',
-      price: 118000,
+      name: 'Cá Hồi Áp Chảo',
+      description: 'Sốt bơ chanh & măng tây',
+      note: 'Ít sốt béo, thêm hạt khô',
+      category: 'Món chính',
+      price: 285000,
       imageUrl:
-          'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=900&q=80',
+          'https://images.unsplash.com/photo-1485921325833-c519f76c4927?auto=format&fit=crop&w=900&q=80',
     ),
   ];
 
@@ -114,9 +117,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
       padding: const EdgeInsets.fromLTRB(6, 8, 8, 8),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE9EAF0)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE9EAF0))),
       ),
       child: Row(
         children: [
@@ -280,7 +281,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                 'Bàn phục vụ',
                 style: TextStyle(
                   color: Color(0xFF222938),
-                  fontSize: 20,
+                  fontSize: 24,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -353,10 +354,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                 size: 18,
               ),
               hintText: 'Tìm món ăn hoặc đồ uống...',
-              hintStyle: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF8A92A2),
-              ),
+              hintStyle: TextStyle(fontSize: 12, color: Color(0xFF8A92A2)),
               border: InputBorder.none,
             ),
           ),
@@ -444,7 +442,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                   item.name,
                   style: const TextStyle(
                     color: Color(0xFF1F2430),
-                    fontSize: 15,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -463,7 +461,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                       _formatCurrency(item.price),
                       style: const TextStyle(
                         color: Color(0xFFB63F1D),
-                        fontSize: 18,
+                        fontSize: 24,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -568,7 +566,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
 
   Widget _buildBottomSummary() {
     final selectedItems = _menuItems
-        .where((e) => (_quantities[e.name] ?? 0) > 0)
+        .where((item) => (_quantities[item.name] ?? 0) > 0)
         .toList();
 
     return Container(
@@ -582,24 +580,16 @@ class _OrderReservationViewState extends State<OrderReservationView> {
         children: [
           Row(
             children: [
-              if (_totalDishCount > 0)
+              if (_totalDishCount > 0) ...[
+                _buildSelectedDishCountBadge(),
+                const SizedBox(width: 4),
                 ...selectedItems.take(3).map(
                   (item) => Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: CircleAvatar(
-                      radius: 12,
-                      backgroundColor: const Color(0xFFF1F4FB),
-                      child: Text(
-                        item.name.substring(0, 1),
-                        style: const TextStyle(
-                          color: Color(0xFF505767),
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+                    child: _buildSelectedDishThumb(item),
                   ),
-                )
+                ),
+              ]
               else
                 const CircleAvatar(
                   radius: 12,
@@ -616,68 +606,26 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                   '$_totalDishCount món',
                   style: const TextStyle(
                     color: Color(0xFF5D6574),
-                    fontSize: 15,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               TextButton(
-                onPressed: () => setState(() => _showDetails = !_showDetails),
-                child: Text(
-                  _showDetails
-                      ? 'Ẩn chi tiết'
-                      : 'Xem chi tiết ∧',
-                  style: const TextStyle(
+                onPressed: _totalDishCount == 0
+                    ? null
+                    : () => _showOrderDetailSheet(context),
+                child: const Text(
+                  'Xem chi tiết ^',
+                  style: TextStyle(
                     color: Color(0xFFB63F1D),
-                    fontSize: 15,
+                    fontSize: 10,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
             ],
           ),
-          if (_showDetails && selectedItems.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F9FD),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: selectedItems
-                    .map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${item.name} x${_quantities[item.name]}',
-                                style: const TextStyle(
-                                  color: Color(0xFF505869),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              _formatCurrency(
-                                item.price * (_quantities[item.name] ?? 0),
-                              ),
-                              style: const TextStyle(
-                                color: Color(0xFF505869),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
           Row(
             children: [
               Expanded(
@@ -685,7 +633,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                   'Tổng cộng ($_totalDishCount món)',
                   style: const TextStyle(
                     color: Color(0xFF5D6574),
-                    fontSize: 15,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -715,7 +663,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                 'XÁC NHẬN ĐƠN HÀNG',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 15,
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.4,
                 ),
@@ -732,6 +680,373 @@ class _OrderReservationViewState extends State<OrderReservationView> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSelectedDishCountBadge() {
+    return Container(
+      width: 20,
+      height: 20,
+      decoration: const BoxDecoration(
+        color: Color(0xFFB63F1D),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '$_totalDishCount',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 8,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedDishThumb(_MenuItem item) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: Image.network(
+          item.imageUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, _, __) => Container(
+            color: const Color(0xFFEAEFF7),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.restaurant_rounded,
+              size: 11,
+              color: Color(0xFF7B8394),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showOrderDetailSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final selectedItems = _menuItems
+                .where((item) => (_quantities[item.name] ?? 0) > 0)
+                .toList();
+            final screenHeight = MediaQuery.sizeOf(context).height;
+            final maxSheetHeight = screenHeight * 0.78;
+            final maxListHeight = screenHeight * 0.36;
+
+            return Container(
+              constraints: BoxConstraints(maxHeight: maxSheetHeight),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2C5BB),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 14, 14, 8),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Chi tiết đơn hàng',
+                              style: TextStyle(
+                                color: Color(0xFF202533),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            style: IconButton.styleFrom(
+                              backgroundColor: const Color(0xFFF1F3F7),
+                              minimumSize: const Size(34, 34),
+                            ),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Color(0xFF5F6878),
+                              size: 19,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (selectedItems.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(18, 12, 18, 28),
+                        child: Text(
+                          'Chưa có món nào trong đơn.',
+                          style: TextStyle(
+                            color: Color(0xFF667085),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxListHeight),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
+                          itemCount: selectedItems.length,
+                          separatorBuilder: (_, __) => const Divider(
+                            height: 22,
+                            color: Color(0xFFE8D7D2),
+                          ),
+                          itemBuilder: (context, index) {
+                            final item = selectedItems[index];
+                            return _buildOrderDetailItem(
+                              item,
+                              onRemove: () {
+                                setState(() {
+                                  _quantities[item.name] = 0;
+                                });
+                                setSheetState(() {});
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF0F4FB),
+                        border: Border(
+                          top: BorderSide(color: Color(0xFFE1E6EF)),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Tổng cộng ($_totalDishCount món)',
+                                  style: const TextStyle(
+                                    color: Color(0xFF636B7A),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _formatCurrency(_totalPrice),
+                                style: const TextStyle(
+                                  color: Color(0xFFB63F1D),
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.table_restaurant_outlined,
+                                color: Color(0xFF4E5665),
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                "Bàn số ${_tables[_selectedTableIndex].replaceAll('T-', '')}",
+                                style: const TextStyle(
+                                  color: Color(0xFF4E5665),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Center(
+                            child: SizedBox(
+                              width: 210,
+                              height: 44,
+                              child: ElevatedButton.icon(
+                                onPressed: _totalDishCount == 0 ? null : () {},
+                                icon: const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                label: const Text(
+                                  'XÁC NHẬN ĐƠN HÀNG',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFB63F1D),
+                                  disabledBackgroundColor:
+                                      const Color(0xFFBFC6D3),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildOrderDetailItem(_MenuItem item, {required VoidCallback onRemove}) {
+    final quantity = _quantities[item.name] ?? 0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                item.imageUrl,
+                width: 58,
+                height: 58,
+                fit: BoxFit.cover,
+                errorBuilder: (context, _, __) => Container(
+                  width: 58,
+                  height: 58,
+                  color: const Color(0xFFEAEFF7),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.image_not_supported_outlined,
+                    color: Color(0xFF939BAA),
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: -3,
+              right: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB63F1D),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'x$quantity',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.name,
+                      style: const TextStyle(
+                        color: Color(0xFF202533),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _formatCurrency(item.price * quantity),
+                    style: const TextStyle(
+                      color: Color(0xFFB63F1D),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: onRemove,
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: Color(0xFF8A7280),
+                      size: 16,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.notes_rounded,
+                    size: 13,
+                    color: Color(0xFF7A8394),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      item.note,
+                      style: const TextStyle(
+                        color: Color(0xFF6B7280),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -753,6 +1068,7 @@ class _MenuItem {
   const _MenuItem({
     required this.name,
     required this.description,
+    required this.note,
     required this.category,
     required this.price,
     required this.imageUrl,
@@ -760,8 +1076,8 @@ class _MenuItem {
 
   final String name;
   final String description;
+  final String note;
   final String category;
   final int price;
   final String imageUrl;
 }
-
