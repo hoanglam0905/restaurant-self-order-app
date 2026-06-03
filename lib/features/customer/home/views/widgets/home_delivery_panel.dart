@@ -5,7 +5,9 @@ import '../../../../../core/widgets/app_action_tile.dart';
 import '../../controllers/home_controller.dart';
 
 class HomeDeliveryPanel extends StatelessWidget {
-  const HomeDeliveryPanel({super.key});
+  const HomeDeliveryPanel({required this.onCallStaff, super.key});
+
+  final VoidCallback onCallStaff;
 
   @override
   Widget build(BuildContext context) {
@@ -16,17 +18,17 @@ class HomeDeliveryPanel extends StatelessWidget {
         const SizedBox(width: 8),
         AppActionTile(
           imagePath: 'assets/images/home/call_staff.png',
-          label: 'Call Staff',
+          label: 'Gọi NV',
           width: 60,
           height: 54,
           imageWidth: 42,
           imageHeight: 42,
-          onTap: () => _showPendingFeature(context),
+          onTap: onCallStaff,
         ),
         const SizedBox(width: 8),
         AppActionTile(
           imagePath: 'assets/images/home/call_payment.png',
-          label: 'Call Payment',
+          label: 'Thanh toán',
           width: 60,
           height: 54,
           imageWidth: 46,
@@ -40,7 +42,7 @@ class HomeDeliveryPanel extends StatelessWidget {
   void _showPendingFeature(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('This action needs a table/order contract.'),
+        content: Text('Tính năng gọi thanh toán chưa được kết nối.'),
       ),
     );
   }
@@ -78,7 +80,7 @@ class _GreetingCopy extends StatelessWidget {
           runSpacing: 4,
           children: [
             const Text(
-              'We will deliver your food to\nyour table:',
+              'Món ăn sẽ được phục vụ\ntại bàn của bạn:',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 13,

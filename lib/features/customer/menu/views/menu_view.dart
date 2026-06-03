@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_cta_button.dart';
+import '../../../../core/widgets/app_inline_text_link.dart';
 import '../../../../core/widgets/app_search_field.dart';
 import '../../../../core/widgets/app_state_panel.dart';
 import '../../home/data/models/dish_model.dart';
@@ -98,7 +100,7 @@ class _MenuViewState extends State<MenuView> {
                     children: [
                       AppSearchField(
                         controller: _controller.searchTextController,
-                        hintText: 'Search in menu',
+                        hintText: 'Tìm món trong menu',
                         onChanged: _controller.updateSearch,
                       ),
                       const SizedBox(height: 14),
@@ -192,24 +194,43 @@ class _MenuViewState extends State<MenuView> {
 
     final note = await showDialog<String>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: Text('Ghi chú cho ${dish.dishName}'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: Text(
+            'Ghi chú cho ${dish.dishName}',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
           content: TextField(
             controller: textController,
             maxLines: 3,
             decoration: const InputDecoration(
               hintText: 'Ví dụ: ít cay, không hành...',
+              border: OutlineInputBorder(),
             ),
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, textController.text),
-              child: const Text('Lưu'),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppCtaButton(
+                  label: 'Lưu ghi chú',
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, textController.text),
+                  height: 46,
+                  borderRadius: 8,
+                  fontSize: 15,
+                  backgroundColor: AppColors.orderAccent,
+                ),
+                const SizedBox(height: 10),
+                AppInlineTextLink(
+                  label: 'Hủy',
+                  onTap: () => Navigator.pop(dialogContext),
+                  textColor: AppColors.orderAccent,
+                  fontSize: 14,
+                ),
+              ],
             ),
           ],
         );
@@ -258,45 +279,95 @@ class _MenuViewState extends State<MenuView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Chi tiết đơn',
+                    'Chi tiết giỏ hàng',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
-                  ..._controller.cartDishes.map((dish) {
-                    final quantity = _controller.cartQuantityFor(dish);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              dish.dishName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                  if (_controller.cartDishes.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text('Giỏ hàng chưa có món.'),
+                    )
+                  else
+                    ..._controller.cartDishes.map((dish) {
+                      final quantity = _controller.cartQuantityFor(dish);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    dish.dishName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'x$quantity · ${formatMenuPrice(dish.price * quantity, withCurrency: true)}',
+                                    style: const TextStyle(
+                                      color: AppColors.orderAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Text('x$quantity'),
-                          const SizedBox(width: 16),
-                          Text(
-                            formatMenuPrice(
-                              dish.price * quantity,
-                              withCurrency: true,
+                            _RemoveCartItemAction(
+                              onTap: () {
+                                _controller.removeDishFromCart(dish);
+                                if (_controller.cartDishes.isEmpty) {
+                                  Navigator.pop(context);
+                                }
+                              },
                             ),
-                            style: const TextStyle(
-                              color: AppColors.orderAccent,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                          ],
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _RemoveCartItemAction extends StatelessWidget {
+  const _RemoveCartItemAction({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Ink(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF2F0),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFFFCDC7)),
+          ),
+          child: const Icon(
+            Icons.delete_outline_rounded,
+            color: Color(0xFFB3261E),
+            size: 18,
+          ),
+        ),
+      ),
     );
   }
 }

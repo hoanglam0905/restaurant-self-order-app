@@ -6,8 +6,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_customer_bottom_nav_bar.dart';
 import '../../../../core/widgets/app_state_panel.dart';
 import '../../menu/views/menu_view.dart';
+import '../../settings/views/settings_view.dart';
 import '../controllers/order_history_controller.dart';
 import '../data/services/order_history_service.dart';
+import '../data/services/order_receipt_service.dart';
 import 'order_detail_view.dart';
 import 'widgets/order_history_card.dart';
 import 'widgets/order_history_section_label.dart';
@@ -27,9 +29,11 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
   void initState() {
     super.initState();
     _controllerTag = UniqueKey().toString();
+    final apiClient = ApiClient();
     _controller = Get.put(
       OrderHistoryController(
-        orderHistoryService: OrderHistoryService(ApiClient()),
+        orderHistoryService: OrderHistoryService(apiClient),
+        orderReceiptService: OrderReceiptService(apiClient),
       ),
       tag: _controllerTag,
     );
@@ -108,7 +112,7 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
         widgets.add(
           OrderHistoryCard(
             order: order,
-            onPrint: () => _showPending(context),
+            onPrint: () => _exportReceipt(context, order.orderId),
             onViewDetail: () {
               Navigator.push(
                 context,
@@ -125,6 +129,24 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
     });
 
     return widgets;
+  }
+
+  Future<void> _exportReceipt(BuildContext context, int orderId) async {
+    final filePath = await _controller.exportReceiptPdf(orderId);
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          filePath == null
+              ? _controller.receiptMessage.value
+              : 'Đã xuất hóa đơn PDF.',
+        ),
+        backgroundColor: AppColors.orderAccent,
+      ),
+    );
   }
 
   void _onNavSelected(BuildContext context, int index) {
@@ -147,6 +169,14 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
       return;
     }
 
+    if (index == 4) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SettingsView()),
+      );
+      return;
+    }
+
     _showPending(context);
   }
 
@@ -162,19 +192,15 @@ class _HistoryTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return const SizedBox(
       height: 64,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 14, 0),
+        padding: EdgeInsets.fromLTRB(16, 4, 14, 0),
         child: Row(
           children: [
-            const Icon(
-              Icons.history_rounded,
-              color: AppColors.orderAccent,
-              size: 23,
-            ),
-            const SizedBox(width: 6),
-            const Expanded(
+            Icon(Icons.history_rounded, color: AppColors.orderAccent, size: 23),
+            SizedBox(width: 6),
+            Expanded(
               child: Text(
                 'Lịch sử đơn hàng',
                 style: TextStyle(
@@ -184,16 +210,9 @@ class _HistoryTopBar extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.search_rounded,
-                color: Color(0xFF4C4B50),
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const CircleAvatar(
+            Icon(Icons.search_rounded, color: Color(0xFF4C4B50), size: 24),
+            SizedBox(width: 8),
+            CircleAvatar(
               radius: 18,
               backgroundColor: Color(0xFFF1E8E5),
               child: Icon(

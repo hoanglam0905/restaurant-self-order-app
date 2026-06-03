@@ -4,6 +4,8 @@ import '../../../../core/storage/table_session_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../auth/login/views/login_view.dart';
 import '../../auth/register/views/register_view.dart';
+import '../../home/data/models/table_qr_payload.dart';
+import '../../home/views/table_qr_scan_view.dart';
 import '../../menu/views/menu_view.dart';
 import 'widgets/welcome_action_section.dart';
 import 'widgets/welcome_brand_header.dart';
@@ -113,11 +115,18 @@ class WelcomeView extends StatelessWidget {
   }
 
   Future<void> _openOrderMenu(BuildContext context) async {
-    const tableId = 6;
-    const tableLabel = 'A6';
+    final payload = await Navigator.push<TableQrPayload>(
+      context,
+      MaterialPageRoute(builder: (_) => const TableQrScanView()),
+    );
+
+    if (!context.mounted || payload == null) {
+      return;
+    }
+
     await TableSessionStorage().saveTableSession(
-      tableId: tableId,
-      tableLabel: tableLabel,
+      tableId: payload.tableId,
+      tableLabel: payload.tableLabel,
     );
 
     if (!context.mounted) {
@@ -127,8 +136,10 @@ class WelcomeView extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            const MenuView.order(tableId: tableId, tableLabel: tableLabel),
+        builder: (_) => MenuView.order(
+          tableId: payload.tableId,
+          tableLabel: payload.tableLabel,
+        ),
       ),
     );
   }

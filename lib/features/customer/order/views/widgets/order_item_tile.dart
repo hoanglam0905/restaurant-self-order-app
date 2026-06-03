@@ -6,9 +6,16 @@ import '../../data/models/order_item_model.dart';
 import 'order_status_text.dart';
 
 class OrderItemTile extends StatelessWidget {
-  const OrderItemTile({required this.item, super.key});
+  const OrderItemTile({
+    required this.item,
+    this.onCancel,
+    this.isCancelling = false,
+    super.key,
+  });
 
   final OrderItemModel item;
+  final VoidCallback? onCancel;
+  final bool isCancelling;
 
   @override
   Widget build(BuildContext context) {
@@ -114,6 +121,13 @@ class OrderItemTile extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (onCancel != null) ...[
+                  const SizedBox(height: 10),
+                  _CancelPendingItemAction(
+                    isLoading: isCancelling,
+                    onTap: onCancel!,
+                  ),
+                ],
               ],
             ),
           ),
@@ -154,6 +168,65 @@ class _ItemStatusPill extends StatelessWidget {
           color: color,
           fontSize: 10,
           fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _CancelPendingItemAction extends StatelessWidget {
+  const _CancelPendingItemAction({
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: isLoading ? null : onTap,
+          child: Ink(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF2F0),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFFCDC7)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLoading)
+                  const SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  const Icon(
+                    Icons.close_rounded,
+                    color: Color(0xFFB3261E),
+                    size: 16,
+                  ),
+                const SizedBox(width: 6),
+                Text(
+                  isLoading ? 'Đang hủy...' : 'Hủy món',
+                  style: const TextStyle(
+                    color: Color(0xFFB3261E),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
