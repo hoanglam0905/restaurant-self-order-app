@@ -7,6 +7,9 @@ import 'dish_management/data/services/kitchen_service.dart';
 import 'dish_management/views/kitchen_management_view.dart';
 import 'history_management/views/history_management_view.dart';
 import 'notification_management/views/notification_management_view.dart';
+import 'settings_management/controllers/settings_controller.dart';
+import 'settings_management/data/services/settings_service.dart';
+import 'settings_management/views/settings_management_view.dart';
 import 'table_management/controllers/table_controller.dart';
 import 'table_management/data/services/table_service.dart';
 import 'table_management/views/table_management_view.dart';
@@ -38,6 +41,13 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
         ),
       );
     }
+    if (!Get.isRegistered<SettingsController>()) {
+      Get.put(
+        SettingsController(
+          settingsService: const SettingsService(),
+        ),
+      );
+    }
   }
 
   final List<Widget> _views = const [
@@ -45,11 +55,7 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
     KitchenManagementView(),
     NotificationManagementView(),
     HistoryManagementView(),
-    _PlaceholderScreen(
-      title: 'Cài đặt hệ thống',
-      icon: Icons.settings_rounded,
-      subtitle: 'Cài đặt tài khoản, ca trực và thiết bị',
-    ),
+    SettingsManagementView(),
   ];
 
   @override
@@ -128,102 +134,6 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
               label: 'Cài đặt',
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen({
-    required this.title,
-    required this.icon,
-    required this.subtitle,
-  });
-
-  final String title;
-  final IconData icon;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF9E3A14);
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFFCFCFC),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, color: primaryColor, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFE2E8F0),
-                          width: 2,
-                        ),
-                      ),
-                      child: Icon(icon, size: 64, color: const Color(0xFF94A3B8)),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Text(
-                        subtitle,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black45,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-            ],
-          ),
         ),
       ),
     );
