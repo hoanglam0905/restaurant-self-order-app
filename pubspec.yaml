@@ -38,7 +38,10 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   get: ^4.7.2
   http: ^1.6.0
+  qr_flutter: ^4.1.0
   shared_preferences: ^2.5.5
+  url_launcher: ^6.3.2
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

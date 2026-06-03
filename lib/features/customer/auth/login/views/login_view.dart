@@ -6,7 +6,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/widgets/app_cta_button.dart';
 import '../../../../../core/widgets/app_inline_text_link.dart';
 import '../../../../../core/widgets/app_labeled_auth_text_field.dart';
-import '../../../../staff/staff_navigation_shell.dart';
+import '../../../../staff/face_scan/views/staff_face_scan_view.dart';
 import '../../../home/views/home_view.dart';
 import '../../data/models/auth_response_model.dart';
 import '../../password_reset/views/forgot_password_view.dart';
@@ -219,7 +219,7 @@ class _LoginViewState extends State<LoginView> {
   Widget _destinationFor(AuthResponseModel auth) {
     final userType = auth.userType.toUpperCase();
     if (userType == 'STAFF' || userType == 'ADMIN') {
-      return const StaffNavigationShell();
+      return const StaffFaceScanView();
     }
     return const HomeView();
   }
