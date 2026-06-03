@@ -1,61 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
-class WorkScheduleView extends StatelessWidget {
+import '../controllers/settings_controller.dart';
+import '../data/services/settings_service.dart';
+
+class WorkScheduleView extends StatefulWidget {
   const WorkScheduleView({super.key});
 
-  static const _days = <_WorkDaySchedule>[
-    _WorkDaySchedule(
-      weekday: 'Thứ 2',
-      dateLabel: '01/06',
-      isToday: true,
-      shifts: [
-        _WorkShift(
-          name: 'Ca 01',
-          timeRange: '07:00 - 12:00',
-          status: _WorkShiftStatus.completed,
-        ),
-        _WorkShift(
-          name: 'Ca 02',
-          timeRange: '12:00 - 17:00',
-          status: _WorkShiftStatus.upcoming,
-        ),
-      ],
-    ),
-    _WorkDaySchedule(
-      weekday: 'Thứ 3',
-      dateLabel: '02/06',
-      shifts: [
-        _WorkShift(
-          name: 'Ca 01',
-          timeRange: '07:00 - 12:00',
-          status: _WorkShiftStatus.upcoming,
-        ),
-      ],
-    ),
-    _WorkDaySchedule(
-      weekday: 'Thứ 4',
-      dateLabel: '03/06',
-      shifts: [
-        _WorkShift(
-          name: 'Ca 02',
-          timeRange: '12:00 - 17:00',
-          status: _WorkShiftStatus.upcoming,
-        ),
-      ],
-    ),
-    _WorkDaySchedule(weekday: 'Thứ 5', dateLabel: '04/06', shifts: []),
-    _WorkDaySchedule(
-      weekday: 'Thứ 6',
-      dateLabel: '05/06',
-      shifts: [
-        _WorkShift(
-          name: 'Ca 03',
-          timeRange: '17:00 - 22:00',
-          status: _WorkShiftStatus.upcoming,
-        ),
-      ],
-    ),
-  ];
+  @override
+  State<WorkScheduleView> createState() => _WorkScheduleViewState();
+}
+
+class _WorkScheduleViewState extends State<WorkScheduleView> {
+  late final SettingsController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = Get.find<SettingsController>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _controller.loadMySchedule();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,29 +41,46 @@ class WorkScheduleView extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Bạn có thể gọi API tải lại lịch tại đây.'),
-                ),
-              );
-            },
+            onPressed: _controller.loadMySchedule,
             icon: const Icon(Icons.sync_rounded, color: Color(0xFF798296)),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-        children: [
-          _WeeklySummaryCard(days: _days),
-          const SizedBox(height: 14),
-          ..._days.map(_buildDayCard),
-        ],
-      ),
+      body: Obx(() {
+        if (_controller.isScheduleLoading.value &&
+            _controller.scheduleDays.isEmpty) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFFB84D2D)),
+          );
+        }
+
+        if (_controller.scheduleErrorMessage.value.isNotEmpty &&
+            _controller.scheduleDays.isEmpty) {
+          return _ErrorPanel(
+            message: _controller.scheduleErrorMessage.value,
+            onRetry: _controller.loadMySchedule,
+          );
+        }
+
+        final days = _controller.scheduleDays.toList();
+
+        return RefreshIndicator(
+          color: const Color(0xFFB84D2D),
+          onRefresh: _controller.loadMySchedule,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            children: [
+              _WeeklySummaryCard(days: days),
+              const SizedBox(height: 14),
+              ...days.map(_buildDayCard),
+            ],
+          ),
+        );
+      }),
     );
   }
 
-  Widget _buildDayCard(_WorkDaySchedule day) {
+  Widget _buildDayCard(StaffScheduleDayModel day) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -119,7 +102,7 @@ class WorkScheduleView extends StatelessWidget {
           Row(
             children: [
               Text(
-                day.weekday,
+                day.weekdayLabel,
                 style: const TextStyle(
                   color: Color(0xFF202736),
                   fontSize: 16,
@@ -167,8 +150,9 @@ class WorkScheduleView extends StatelessWidget {
     );
   }
 
-  Widget _buildShiftTile(_WorkShift shift) {
+  Widget _buildShiftTile(StaffShiftScheduleModel shift) {
     final colors = _statusStyle(shift.status);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -198,7 +182,7 @@ class WorkScheduleView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  shift.name,
+                  shift.shiftName,
                   style: const TextStyle(
                     color: Color(0xFF252D3D),
                     fontSize: 14,
@@ -217,6 +201,15 @@ class WorkScheduleView extends StatelessWidget {
               ],
             ),
           ),
+          if (shift.staffShiftId != null && shift.status == 'ASSIGNED')
+            IconButton(
+              tooltip: 'Hủy ca',
+              onPressed: () => _confirmCancelShift(shift.staffShiftId!),
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Color(0xFFD24B35),
+              ),
+            ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
@@ -237,9 +230,46 @@ class WorkScheduleView extends StatelessWidget {
     );
   }
 
-  _ShiftStatusStyle _statusStyle(_WorkShiftStatus status) {
+  Future<void> _confirmCancelShift(int staffShiftId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hủy ca làm'),
+        content: const Text('Bạn có chắc muốn hủy ca làm này không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Không'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Hủy ca'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _controller.cancelShift(staffShiftId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã hủy ca làm.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(SettingsService.errorMessage(error))),
+      );
+    }
+  }
+
+  _ShiftStatusStyle _statusStyle(String? status) {
     switch (status) {
-      case _WorkShiftStatus.completed:
+      case 'COMPLETED':
         return const _ShiftStatusStyle(
           label: 'Đã hoàn thành',
           textColor: Color(0xFF0F8B54),
@@ -247,7 +277,15 @@ class WorkScheduleView extends StatelessWidget {
           tagBackgroundColor: Color(0xFFD9F4E5),
           borderColor: Color(0xFFDCF1E5),
         );
-      case _WorkShiftStatus.upcoming:
+      case 'ABSENT':
+        return const _ShiftStatusStyle(
+          label: 'Vắng mặt',
+          textColor: Color(0xFFC62828),
+          backgroundColor: Color(0xFFFFF5F5),
+          tagBackgroundColor: Color(0xFFFFE0E0),
+          borderColor: Color(0xFFFFD3D3),
+        );
+      default:
         return const _ShiftStatusStyle(
           label: 'Sắp tới',
           textColor: Color(0xFFB84D2D),
@@ -262,17 +300,21 @@ class WorkScheduleView extends StatelessWidget {
 class _WeeklySummaryCard extends StatelessWidget {
   const _WeeklySummaryCard({required this.days});
 
-  final List<_WorkDaySchedule> days;
+  final List<StaffScheduleDayModel> days;
 
   @override
   Widget build(BuildContext context) {
     var totalShifts = 0;
     var completedShifts = 0;
+    var totalHours = 0.0;
+
     for (final day in days) {
       totalShifts += day.shifts.length;
-      completedShifts += day.shifts
-          .where((shift) => shift.status == _WorkShiftStatus.completed)
-          .length;
+      completedShifts += day.shifts.where((shift) => shift.status == 'COMPLETED').length;
+
+      for (final shift in day.shifts) {
+        totalHours += shift.endDateTime.difference(shift.startDateTime).inMinutes / 60;
+      }
     }
 
     return Container(
@@ -295,23 +337,24 @@ class _WeeklySummaryCard extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _SummaryMetric(
-              label: 'Tổng ca tuần',
-              value: '$totalShifts ca',
-            ),
+            child: _SummaryMetric(label: 'Tổng ca tuần', value: '$totalShifts ca'),
           ),
           Expanded(
-            child: _SummaryMetric(
-              label: 'Đã xong',
-              value: '$completedShifts ca',
-            ),
+            child: _SummaryMetric(label: 'Đã xong', value: '$completedShifts ca'),
           ),
-          const Expanded(
-            child: _SummaryMetric(label: 'Tổng giờ', value: '20h'),
+          Expanded(
+            child: _SummaryMetric(label: 'Tổng giờ', value: _formatHours(totalHours)),
           ),
         ],
       ),
     );
+  }
+
+  String _formatHours(double hours) {
+    if (hours % 1 == 0) {
+      return '${hours.toInt()}h';
+    }
+    return '${hours.toStringAsFixed(1)}h';
   }
 }
 
@@ -373,34 +416,6 @@ class _NoShiftPlaceholder extends StatelessWidget {
   }
 }
 
-class _WorkDaySchedule {
-  const _WorkDaySchedule({
-    required this.weekday,
-    required this.dateLabel,
-    required this.shifts,
-    this.isToday = false,
-  });
-
-  final String weekday;
-  final String dateLabel;
-  final bool isToday;
-  final List<_WorkShift> shifts;
-}
-
-class _WorkShift {
-  const _WorkShift({
-    required this.name,
-    required this.timeRange,
-    required this.status,
-  });
-
-  final String name;
-  final String timeRange;
-  final _WorkShiftStatus status;
-}
-
-enum _WorkShiftStatus { completed, upcoming }
-
 class _ShiftStatusStyle {
   const _ShiftStatusStyle({
     required this.label,
@@ -415,4 +430,38 @@ class _ShiftStatusStyle {
   final Color backgroundColor;
   final Color tagBackgroundColor;
   final Color borderColor;
+}
+
+class _ErrorPanel extends StatelessWidget {
+  const _ErrorPanel({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF555D6D),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: onRetry,
+              child: const Text('Thử lại'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -37,7 +37,7 @@ class LoginService {
     } on LoginException {
       rethrow;
     } catch (_) {
-      throw const LoginException('Khong the dang nhap.');
+      throw const LoginException('Không thể đăng nhập.');
     }
   }
 
@@ -60,23 +60,28 @@ class LoginService {
     } on LoginException {
       rethrow;
     } catch (_) {
-      throw const LoginException('Khong the dang nhap bang Google.');
+      throw const LoginException('Không thể đăng nhập bằng Google.');
     }
   }
 
   Future<void> _saveTokens(AuthResponseModel auth) async {
     if (auth.accessToken.isEmpty || auth.refreshToken.isEmpty) {
-      throw const LoginException('May chu chua tra ve token hop le.');
+      throw const LoginException('Máy chủ chưa trả về token hợp lệ.');
     }
 
     await _tokenStorage.saveTokens(
       accessToken: auth.accessToken,
       refreshToken: auth.refreshToken,
     );
+
     await _authSessionStorage.saveAuthProfile(
       userType: auth.userType,
       customerId: auth.customerId,
       customerName: auth.fullName,
+      staffId: auth.staffId,
+      staffName: auth.fullName,
+      username: auth.username,
+      email: auth.email,
     );
   }
 
@@ -84,11 +89,11 @@ class LoginService {
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.sendTimeout ||
         error.type == DioExceptionType.receiveTimeout) {
-      return 'May chu dang phan hoi cham. Vui long thu lai sau it phut.';
+      return 'Máy chủ đang phản hồi chậm. Vui lòng thử lại sau ít phút.';
     }
 
     if (error.type == DioExceptionType.connectionError) {
-      return 'Khong the ket noi den may chu nha hang. Vui long kiem tra mang.';
+      return 'Không thể kết nối đến máy chủ nhà hàng. Vui lòng kiểm tra mạng.';
     }
 
     final serverMessage = _serverMessage(error.response?.data);
@@ -98,12 +103,12 @@ class LoginService {
 
     final statusCode = error.response?.statusCode;
     return switch (statusCode) {
-      400 => 'Thong tin dang nhap khong hop le.',
-      401 => 'Email hoac mat khau khong dung.',
-      403 => 'Tai khoan nay khong co quyen truy cap.',
-      404 => 'Khong tim thay tai khoan.',
-      500 => 'May chu chua the xu ly dang nhap.',
-      _ => 'Khong the ket noi den may chu nha hang.',
+      400 => 'Thông tin đăng nhập không hợp lệ.',
+      401 => 'Email hoặc mật khẩu không đúng.',
+      403 => 'Tài khoản này không có quyền truy cập.',
+      404 => 'Không tìm thấy tài khoản.',
+      500 => 'Máy chủ chưa thể xử lý đăng nhập.',
+      _ => 'Không thể kết nối đến máy chủ nhà hàng.',
     };
   }
 
@@ -113,6 +118,9 @@ class LoginService {
     }
     if (data is Map) {
       return data['message']?.toString();
+    }
+    if (data is String) {
+      return data;
     }
     return null;
   }

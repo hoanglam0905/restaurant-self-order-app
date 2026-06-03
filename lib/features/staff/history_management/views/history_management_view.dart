@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/config/api_config.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../customer/order/data/models/order_detail_model.dart';
 import '../../../customer/order/data/models/order_item_model.dart';
 
@@ -32,10 +35,57 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
   static const Color _primary = Color(0xFFAA3B20);
   static const Color _surface = Color(0xFFF9F6F7);
 
-  final List<OrderDetailModel> _orders = _buildMockOrders();
+  late final _HistoryOrderApiService _historyOrderApiService;
+
+  List<OrderDetailModel> _orders = <OrderDetailModel>[];
   DateTime? _selectedDate;
   _HistorySortType _sortType = _HistorySortType.newest;
   _HistoryTimeFilter _timeFilter = _HistoryTimeFilter.all;
+
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _historyOrderApiService = _HistoryOrderApiService(apiClient: ApiClient());
+    _loadOrders();
+  }
+
+  Future<void> _loadOrders({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final orders = await _historyOrderApiService.fetchOrders();
+
+      if (!mounted) return;
+
+      setState(() {
+        _orders = orders;
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    } on DioException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = _formatDioError(error);
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Không thể tải lịch sử đơn hàng: $error';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,43 +105,67 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
               const SizedBox(height: 12),
               _buildFilterRow(context),
               const SizedBox(height: 10),
-              Expanded(
-                child: groups.isEmpty
-                    ? const _EmptyState()
-                    : RefreshIndicator(
-                        color: _primary,
-                        onRefresh: () async {
-                          await Future<void>.delayed(
-                            const Duration(milliseconds: 250),
-                          );
-                          if (!mounted) return;
-                          setState(() {});
-                        },
-                        child: ListView(
-                          padding: const EdgeInsets.fromLTRB(0, 6, 0, 94),
-                          children: [
-                            for (final entry in groups.entries) ...[
-                              _SectionLabel(text: entry.key),
-                              const SizedBox(height: 14),
-                              for (int i = 0; i < entry.value.length; i++) ...[
-                                _HistoryOrderCard(
-                                  order: entry.value[i],
-                                  onViewDetail: () =>
-                                      _openOrderDetail(entry.value[i]),
-                                  onPrint: () => _showPrintDialog(entry.value[i]),
-                                ),
-                                if (i != entry.value.length - 1)
-                                  const SizedBox(height: 12),
-                              ],
-                              const SizedBox(height: 16),
-                            ],
-                          ],
-                        ),
-                      ),
-              ),
+              Expanded(child: _buildBody(groups)),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBody(Map<String, List<OrderDetailModel>> groups) {
+    if (_isLoading && _orders.isEmpty) {
+      return const _LoadingState();
+    }
+
+    if (_errorMessage != null && _orders.isEmpty) {
+      return _ErrorState(
+        message: _errorMessage!,
+        onRetry: () => _loadOrders(),
+      );
+    }
+
+    if (groups.isEmpty) {
+      return RefreshIndicator(
+        color: _primary,
+        onRefresh: () => _loadOrders(showLoading: false),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 180),
+            _EmptyState(),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: _primary,
+      onRefresh: () => _loadOrders(showLoading: false),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 6, 0, 94),
+        children: [
+          if (_errorMessage != null) ...[
+            _InlineErrorBanner(
+              message: _errorMessage!,
+              onRetry: () => _loadOrders(),
+            ),
+            const SizedBox(height: 12),
+          ],
+          for (final entry in groups.entries) ...[
+            _SectionLabel(text: entry.key),
+            const SizedBox(height: 14),
+            for (int i = 0; i < entry.value.length; i++) ...[
+              _HistoryOrderCard(
+                order: entry.value[i],
+                onViewDetail: () => _openOrderDetail(entry.value[i]),
+                onPrint: () => _showPrintDialog(entry.value[i]),
+              ),
+              if (i != entry.value.length - 1) const SizedBox(height: 12),
+            ],
+            const SizedBox(height: 16),
+          ],
+        ],
       ),
     );
   }
@@ -251,24 +325,29 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
       final key = _isSameDay(date, now) ? 'HÔM NAY' : _formatDate(date);
       grouped.putIfAbsent(key, () => <OrderDetailModel>[]).add(order);
     }
+
     return grouped;
   }
 
   List<OrderDetailModel> _filteredAndSortedOrders() {
     final result = _orders.where((order) {
       final date = _orderDate(order);
+
       if (_selectedDate != null && !_isSameDay(date, _selectedDate!)) {
         return false;
       }
+
       return _matchTimeFilter(date);
     }).toList();
 
     result.sort((a, b) {
       final aDate = _orderDate(a);
       final bDate = _orderDate(b);
+
       if (_sortType == _HistorySortType.newest) {
         return bDate.compareTo(aDate);
       }
+
       return aDate.compareTo(bDate);
     });
 
@@ -277,6 +356,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
 
   bool _matchTimeFilter(DateTime dateTime) {
     final hour = dateTime.hour;
+
     return switch (_timeFilter) {
       _HistoryTimeFilter.all => true,
       _HistoryTimeFilter.morning => hour < 12,
@@ -295,9 +375,9 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: _primary),
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: _primary,
+                ),
           ),
           child: child ?? const SizedBox.shrink(),
         );
@@ -423,6 +503,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
     );
 
     if (allow != true || !mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -433,15 +514,33 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
   }
 
   Future<void> _openOrderDetail(OrderDetailModel order) async {
+    OrderDetailModel detailOrder = order;
+
+    try {
+      detailOrder = await _historyOrderApiService.fetchOrderById(order.orderId);
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Không lấy được dữ liệu mới nhất, đang mở dữ liệu từ danh sách.',
+          ),
+        ),
+      );
+    }
+
+    if (!mounted) return;
+
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => _HistoryOrderDetailPage(order: order),
+        builder: (_) => _HistoryOrderDetailPage(order: detailOrder),
       ),
     );
   }
 
   DateTime _orderDate(OrderDetailModel order) {
-    return order.reservationTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return order.orderDate ?? order.reservationTime ?? DateTime.now();
   }
 
   bool _isSameDay(DateTime a, DateTime b) {
@@ -452,7 +551,185 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
     final dd = dateTime.day.toString().padLeft(2, '0');
     final mm = dateTime.month.toString().padLeft(2, '0');
     final yyyy = dateTime.year.toString();
+
     return '$dd/$mm/$yyyy';
+  }
+}
+
+class _HistoryOrderApiService {
+  const _HistoryOrderApiService({required ApiClient apiClient})
+      : _apiClient = apiClient;
+
+  final ApiClient _apiClient;
+
+  static const String _ordersQuery = r'''
+query GetOrders {
+  orders {
+    orderId
+    customerName
+    tableNumber
+    status
+    totalAmount
+    paymentStatus
+    reservationTime
+    orderDate
+    items {
+      dishId
+      dishName
+      quantity
+      price
+      notes
+      status
+    }
+  }
+}
+''';
+
+  static const String _orderDetailQuery = r'''
+query GetOrder($orderId: String!) {
+  order(orderId: $orderId) {
+    orderId
+    customerName
+    tableNumber
+    status
+    totalAmount
+    paymentStatus
+    reservationTime
+    orderDate
+    items {
+      dishId
+      dishName
+      quantity
+      price
+      notes
+      status
+    }
+  }
+}
+''';
+
+  Future<List<OrderDetailModel>> fetchOrders() async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      ApiConfig.graphqlUrl,
+      data: <String, dynamic>{
+        'query': _ordersQuery,
+      },
+    );
+
+    final body = response.data;
+    if (body == null) {
+      throw Exception('Server không trả về dữ liệu.');
+    }
+
+    _throwIfGraphQLError(body);
+
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Response GraphQL không hợp lệ.');
+    }
+
+    final rawOrders = data['orders'];
+    if (rawOrders is! List) {
+      return <OrderDetailModel>[];
+    }
+
+    return rawOrders
+        .whereType<Map>()
+        .map((raw) => _normalizeOrderJson(raw))
+        .map(OrderDetailModel.fromJson)
+        .toList();
+  }
+
+  Future<OrderDetailModel> fetchOrderById(int orderId) async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      ApiConfig.graphqlUrl,
+      data: <String, dynamic>{
+        'query': _orderDetailQuery,
+        'variables': <String, dynamic>{
+          'orderId': orderId.toString(),
+        },
+      },
+    );
+
+    final body = response.data;
+    if (body == null) {
+      throw Exception('Server không trả về dữ liệu.');
+    }
+
+    _throwIfGraphQLError(body);
+
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Response GraphQL không hợp lệ.');
+    }
+
+    final rawOrder = data['order'];
+    if (rawOrder is! Map) {
+      throw Exception('Không tìm thấy đơn hàng #$orderId.');
+    }
+
+    return OrderDetailModel.fromJson(_normalizeOrderJson(rawOrder));
+  }
+
+  Map<String, dynamic> _normalizeOrderJson(Map<dynamic, dynamic> raw) {
+    final rawItems = raw['items'];
+
+    return <String, dynamic>{
+      'orderId': raw['orderId'],
+      'customerName': raw['customerName'],
+      'tableNumber': _toInt(raw['tableNumber']),
+      'status': raw['status']?.toString() ?? 'PENDING',
+      'totalAmount': _toDouble(raw['totalAmount']),
+      'paymentStatus': raw['paymentStatus']?.toString() ?? 'UNPAID',
+      'reservationTime': raw['reservationTime'],
+      'orderDate': raw['orderDate'],
+      'items': rawItems is List
+          ? rawItems
+              .whereType<Map>()
+              .map((item) => _normalizeOrderItemJson(item))
+              .toList()
+          : <Map<String, dynamic>>[],
+    };
+  }
+
+  Map<String, dynamic> _normalizeOrderItemJson(Map<dynamic, dynamic> raw) {
+    return <String, dynamic>{
+      'dishId': raw['dishId'],
+      'dishName': raw['dishName'],
+      'quantity': _toInt(raw['quantity']),
+      'price': _toDouble(raw['price']),
+      'notes': raw['notes'],
+      'status': raw['status']?.toString() ?? 'PENDING',
+    };
+  }
+
+  void _throwIfGraphQLError(Map<String, dynamic> body) {
+    final errors = body['errors'];
+
+    if (errors is List && errors.isNotEmpty) {
+      final firstError = errors.first;
+
+      if (firstError is Map && firstError['message'] != null) {
+        throw Exception(firstError['message'].toString());
+      }
+
+      throw Exception('GraphQL trả về lỗi.');
+    }
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 }
 
@@ -469,10 +746,11 @@ class _HistoryOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final date = order.reservationTime ?? DateTime.now();
+    final date = order.orderDate ?? order.reservationTime ?? DateTime.now();
     final timeLabel =
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:00';
     final orderCode = order.orderId.toString().padLeft(4, '0');
+    final total = _calculateFinalTotal(order);
 
     return Container(
       decoration: BoxDecoration(
@@ -552,7 +830,7 @@ class _HistoryOrderCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        _formatCurrency(order.totalAmount),
+                        _formatCurrency(total),
                         style: const TextStyle(
                           color: Color(0xFFAA3B20),
                           fontSize: 20,
@@ -625,6 +903,7 @@ class _PaymentBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final paid = status.toUpperCase() == 'PAID';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
@@ -779,6 +1058,19 @@ class _FilterPill extends StatelessWidget {
   }
 }
 
+class _LoadingState extends StatelessWidget {
+  const _LoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: CircularProgressIndicator(
+        color: Color(0xFFAA3B20),
+      ),
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
@@ -797,6 +1089,111 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Color(0xFFAA3B20),
+              size: 38,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF6D6868),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFAA3B20),
+              ),
+              child: const Text(
+                'Thử lại',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineErrorBanner extends StatelessWidget {
+  const _InlineErrorBanner({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE7CDA6)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFC47B1B),
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF80510E),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text(
+              'Thử lại',
+              style: TextStyle(
+                color: Color(0xFFAA3B20),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HistoryOrderDetailPage extends StatelessWidget {
   const _HistoryOrderDetailPage({required this.order});
 
@@ -805,12 +1202,9 @@ class _HistoryOrderDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = order.items.fold<double>(
-      0,
-      (sum, item) => sum + item.subtotal,
-    );
-    final serviceTax = (subtotal * 0.12).roundToDouble();
-    final total = subtotal + serviceTax;
+    final subtotal = _calculateSubtotal(order);
+    final serviceTax = _calculateServiceTax(order);
+    final total = _calculateFinalTotal(order);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F7),
@@ -847,7 +1241,9 @@ class _HistoryOrderDetailPage extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFE7D8D3)),
+                              border: Border.all(
+                                color: const Color(0xFFE7D8D3),
+                              ),
                             ),
                             child: const Icon(
                               Icons.restaurant_menu_rounded,
@@ -1078,6 +1474,7 @@ class _HistoryOrderDetailPage extends StatelessWidget {
     );
 
     if (allow != true || !context.mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -1096,6 +1493,7 @@ class _DetailDishCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imagePath = _imageForDish(item.dishId);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1158,7 +1556,7 @@ class _DetailDishCard extends StatelessWidget {
                 Text(
                   item.notes?.isNotEmpty == true
                       ? 'Ghi chú: ${item.notes}'
-                      : 'Ghi chú: Phục vụ sau món chính.',
+                      : 'Ghi chú: Không có.',
                   style: const TextStyle(
                     color: Color(0xFF6D6D74),
                     fontSize: 13,
@@ -1230,6 +1628,7 @@ class _DashedLine extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dashCount = (constraints.maxWidth / 7).floor();
+
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(
@@ -1248,6 +1647,28 @@ class _DashedLine extends StatelessWidget {
   }
 }
 
+double _calculateSubtotal(OrderDetailModel order) {
+  if (order.totalAmount > 0) {
+    return order.totalAmount;
+  }
+
+  return order.items.fold<double>(
+    0,
+    (sum, item) => sum + item.subtotal,
+  );
+}
+
+double _calculateServiceTax(OrderDetailModel order) {
+  final subtotal = _calculateSubtotal(order);
+  return (subtotal * 0.12).roundToDouble();
+}
+
+double _calculateFinalTotal(OrderDetailModel order) {
+  final subtotal = _calculateSubtotal(order);
+  final serviceTax = _calculateServiceTax(order);
+  return subtotal + serviceTax;
+}
+
 String _formatCurrency(double amount) {
   final rounded = amount.round();
   final value = rounded.toString();
@@ -1256,6 +1677,7 @@ String _formatCurrency(double amount) {
   for (int i = 0; i < value.length; i++) {
     final reverseIndex = value.length - i;
     buffer.write(value[i]);
+
     if (reverseIndex > 1 && reverseIndex % 3 == 1) {
       buffer.write('.');
     }
@@ -1270,143 +1692,35 @@ String _imageForDish(int dishId) {
     'assets/images/home/TodaySpecial2.jpg',
     'assets/images/home/banner2.jpg',
   ];
+
   return images[dishId % images.length];
 }
 
-List<OrderDetailModel> _buildMockOrders() {
-  final now = DateTime.now();
-  return [
-    OrderDetailModel(
-      orderId: 123,
-      customerName: 'Khách lẻ',
-      tableNumber: 1,
-      status: 'COMPLETED',
-      totalAmount: 1200000,
-      paymentStatus: 'PAID',
-      reservationTime: DateTime(now.year, now.month, now.day, 18, 30),
-      items: const [
-        OrderItemModel(
-          dishId: 1,
-          dishName: 'Salad Landaise',
-          quantity: 1,
-          price: 185000,
-          notes: 'Ít sốt béo, thêm hạt khô.',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 2,
-          dishName: 'Magret De Canard',
-          quantity: 2,
-          price: 175000,
-          notes: 'Chín vừa (Medium).',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 3,
-          dishName: 'Fondant au Chocolat',
-          quantity: 1,
-          price: 65000,
-          notes: 'Phục vụ sau món chính.',
-          status: 'COMPLETED',
-        ),
-      ],
-    ),
-    OrderDetailModel(
-      orderId: 122,
-      customerName: 'Khách đoàn',
-      tableNumber: 4,
-      status: 'COMPLETED',
-      totalAmount: 1500000,
-      paymentStatus: 'PAID',
-      reservationTime: DateTime(now.year, now.month, now.day, 18, 10),
-      items: const [
-        OrderItemModel(
-          dishId: 4,
-          dishName: 'Lẩu Thái Hải Sản',
-          quantity: 1,
-          price: 650000,
-          notes: 'Ít cay.',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 5,
-          dishName: 'Tôm Chiên Bơ Tỏi',
-          quantity: 2,
-          price: 260000,
-          notes: 'Thêm tỏi phi.',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 6,
-          dishName: 'Nước ngọt',
-          quantity: 5,
-          price: 66000,
-          notes: 'Đá riêng.',
-          status: 'COMPLETED',
-        ),
-      ],
-    ),
-    OrderDetailModel(
-      orderId: 121,
-      customerName: 'Khách đặt bàn',
-      tableNumber: 4,
-      status: 'COMPLETED',
-      totalAmount: 980000,
-      paymentStatus: 'PAID',
-      reservationTime: DateTime(now.year, now.month, now.day - 1, 18, 10),
-      items: const [
-        OrderItemModel(
-          dishId: 7,
-          dishName: 'Cá hồi áp chảo',
-          quantity: 2,
-          price: 310000,
-          notes: 'Sốt chanh dây riêng.',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 8,
-          dishName: 'Mì xào bò',
-          quantity: 2,
-          price: 180000,
-          notes: 'Không hành.',
-          status: 'COMPLETED',
-        ),
-      ],
-    ),
-    OrderDetailModel(
-      orderId: 120,
-      customerName: 'Khách lẻ',
-      tableNumber: 2,
-      status: 'COMPLETED',
-      totalAmount: 780000,
-      paymentStatus: 'PAID',
-      reservationTime: DateTime(now.year, now.month, now.day - 2, 12, 45),
-      items: const [
-        OrderItemModel(
-          dishId: 10,
-          dishName: 'Cơm gà quay',
-          quantity: 2,
-          price: 140000,
-          notes: 'Da giòn.',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 11,
-          dishName: 'Gỏi cuốn tôm thịt',
-          quantity: 3,
-          price: 95000,
-          notes: 'Thêm rau.',
-          status: 'COMPLETED',
-        ),
-        OrderItemModel(
-          dishId: 12,
-          dishName: 'Sữa tươi trân châu',
-          quantity: 2,
-          price: 107500,
-          notes: 'Ít đá.',
-          status: 'COMPLETED',
-        ),
-      ],
-    ),
-  ];
+String _formatDioError(DioException error) {
+  final statusCode = error.response?.statusCode;
+  final responseData = error.response?.data;
+
+  if (statusCode == 401 || statusCode == 403) {
+    return 'Bạn chưa đăng nhập hoặc không có quyền xem lịch sử đơn hàng.';
+  }
+
+  if (responseData is Map && responseData['message'] != null) {
+    return responseData['message'].toString();
+  }
+
+  if (responseData is String && responseData.isNotEmpty) {
+    return responseData;
+  }
+
+  if (error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      error.type == DioExceptionType.sendTimeout) {
+    return 'Kết nối tới server quá lâu. Vui lòng thử lại.';
+  }
+
+  if (error.type == DioExceptionType.connectionError) {
+    return 'Không kết nối được tới server. Kiểm tra mạng hoặc backend.';
+  }
+
+  return 'Không thể tải lịch sử đơn hàng.';
 }
