@@ -1,7 +1,9 @@
 import 'package:get/get.dart';
 
 import '../data/models/order_detail_model.dart';
+import '../data/models/order_item_model.dart';
 import '../data/services/order_detail_service.dart';
+import '../data/services/order_receipt_service.dart';
 
 enum CustomerPaymentMethod {
   cash('CASH', 'Tiền mặt'),
@@ -17,16 +19,22 @@ enum CustomerPaymentMethod {
 class OrderDetailController extends GetxController {
   OrderDetailController({
     required OrderDetailService orderDetailService,
+    required OrderReceiptService orderReceiptService,
     required this.orderId,
-  }) : _orderDetailService = orderDetailService;
+  }) : _orderDetailService = orderDetailService,
+       _orderReceiptService = orderReceiptService;
 
   final OrderDetailService _orderDetailService;
+  final OrderReceiptService _orderReceiptService;
   final int orderId;
 
   final RxBool isLoading = false.obs;
   final RxBool isProcessingPayment = false.obs;
+  final RxBool isExportingReceipt = false.obs;
+  final RxInt cancellingDishId = 0.obs;
   final RxString errorMessage = ''.obs;
   final RxString paymentMessage = ''.obs;
+  final RxString receiptMessage = ''.obs;
   final RxString vnpayPaymentUrl = ''.obs;
   final Rx<CustomerPaymentMethod> selectedPaymentMethod =
       CustomerPaymentMethod.online.obs;
@@ -124,6 +132,55 @@ class OrderDetailController extends GetxController {
     selectedPaymentMethod.value = method;
     if (method != CustomerPaymentMethod.online) {
       vnpayPaymentUrl.value = '';
+    }
+  }
+
+  bool canCancelItem(OrderItemModel item) {
+    return item.status.toUpperCase() == 'PENDING' && !isPaid;
+  }
+
+  Future<bool> cancelPendingItem(OrderItemModel item) async {
+    if (!canCancelItem(item)) {
+      errorMessage.value = 'Chỉ có thể hủy món đang chờ xử lý.';
+      return false;
+    }
+
+    cancellingDishId.value = item.dishId;
+    errorMessage.value = '';
+
+    try {
+      order.value = await _orderDetailService.cancelPendingOrderItem(
+        orderId: orderId,
+        dishId: item.dishId,
+      );
+      return true;
+    } on OrderDetailException catch (error) {
+      errorMessage.value = error.message;
+      return false;
+    } catch (_) {
+      errorMessage.value = 'Không thể hủy món đã chọn.';
+      return false;
+    } finally {
+      cancellingDishId.value = 0;
+    }
+  }
+
+  Future<String?> exportReceiptPdf() async {
+    isExportingReceipt.value = true;
+    receiptMessage.value = '';
+
+    try {
+      final filePath = await _orderReceiptService.exportReceiptPdf(orderId);
+      receiptMessage.value = 'Đã xuất hóa đơn PDF.';
+      return filePath;
+    } on OrderReceiptException catch (error) {
+      receiptMessage.value = error.message;
+      return null;
+    } catch (_) {
+      receiptMessage.value = 'Không thể xuất hóa đơn PDF.';
+      return null;
+    } finally {
+      isExportingReceipt.value = false;
     }
   }
 }

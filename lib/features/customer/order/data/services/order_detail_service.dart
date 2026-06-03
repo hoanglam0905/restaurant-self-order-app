@@ -127,6 +127,22 @@ query OrderDetail($orderId: ID!) {
     }
   }
 
+  Future<OrderDetailModel> cancelPendingOrderItem({
+    required int orderId,
+    required int dishId,
+  }) async {
+    try {
+      final response = await _apiClient.dio.delete<Map<String, dynamic>>(
+        '/orders/$orderId/items/$dishId',
+      );
+      return OrderDetailModel.fromJson(response.data ?? {});
+    } on DioException catch (error) {
+      throw OrderDetailException(_cancelItemMessageFromDio(error));
+    } catch (_) {
+      throw const OrderDetailException('Không thể hủy món đã chọn.');
+    }
+  }
+
   String _orderMessageFromDio(DioException error) {
     final statusCode = error.response?.statusCode;
     return switch (statusCode) {
@@ -160,6 +176,29 @@ query OrderDetail($orderId: ID!) {
       404 => 'Không tìm thấy đơn hàng cần thanh toán.',
       409 => 'Đơn hàng này đã được thanh toán.',
       500 => 'Máy chủ chưa thể xử lý thanh toán.',
+      _ => 'Không thể kết nối đến máy chủ nhà hàng.',
+    };
+  }
+
+  String _cancelItemMessageFromDio(DioException error) {
+    final data = error.response?.data;
+    if (data is Map<String, dynamic>) {
+      final message = data['message']?.toString();
+      if (message != null && message.trim().isNotEmpty) {
+        return message;
+      }
+    }
+    if (data is String && data.trim().isNotEmpty) {
+      return data;
+    }
+
+    final statusCode = error.response?.statusCode;
+    return switch (statusCode) {
+      400 => 'Chỉ có thể hủy món đang chờ xử lý.',
+      401 => 'Vui lòng đăng nhập lại trước khi hủy món.',
+      403 => 'Bạn không có quyền hủy món này.',
+      404 => 'Không tìm thấy món trong đơn hàng.',
+      500 => 'Máy chủ chưa thể hủy món.',
       _ => 'Không thể kết nối đến máy chủ nhà hàng.',
     };
   }

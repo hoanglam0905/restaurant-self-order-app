@@ -10,7 +10,9 @@ import '../../../../core/widgets/app_surface_command_button.dart';
 import '../../home/views/home_view.dart';
 import '../controllers/order_detail_controller.dart';
 import '../data/models/order_detail_model.dart';
+import '../data/models/order_item_model.dart';
 import '../data/services/order_detail_service.dart';
+import '../data/services/order_receipt_service.dart';
 import 'order_payment_view.dart';
 import 'widgets/order_item_tile.dart';
 import 'widgets/order_progress_panel.dart';
@@ -33,9 +35,11 @@ class _OrderDetailViewState extends State<OrderDetailView> {
   void initState() {
     super.initState();
     _controllerTag = 'order-detail-${widget.orderId}-${UniqueKey()}';
+    final apiClient = ApiClient();
     _controller = Get.put(
       OrderDetailController(
-        orderDetailService: OrderDetailService(ApiClient()),
+        orderDetailService: OrderDetailService(apiClient),
+        orderReceiptService: OrderReceiptService(apiClient),
         orderId: widget.orderId,
       ),
       tag: _controllerTag,
@@ -84,9 +88,13 @@ class _OrderDetailViewState extends State<OrderDetailView> {
 
                 return _OrderDetailContent(
                   order: order,
+                  cancellingDishId: _controller.cancellingDishId.value,
+                  isExportingReceipt: _controller.isExportingReceipt.value,
                   onRefresh: _controller.loadOrder,
                   onHome: () => _goHome(context),
-                  onPrint: () => _showPrintPending(context),
+                  onPrint: () => _exportReceipt(context),
+                  onCancelItem: (item) => _cancelPendingItem(context, item),
+                  canCancelItem: _controller.canCancelItem,
                 );
               }),
             ),
@@ -123,17 +131,50 @@ class _OrderDetailViewState extends State<OrderDetailView> {
     }
   }
 
+  Future<void> _cancelPendingItem(
+    BuildContext context,
+    OrderItemModel item,
+  ) async {
+    final success = await _controller.cancelPendingItem(item);
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Đã hủy món đang chờ xử lý.'
+              : _controller.errorMessage.value,
+        ),
+        backgroundColor: AppColors.orderAccent,
+      ),
+    );
+  }
+
+  Future<void> _exportReceipt(BuildContext context) async {
+    final filePath = await _controller.exportReceiptPdf();
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          filePath == null
+              ? _controller.receiptMessage.value
+              : 'Đã xuất hóa đơn PDF.',
+        ),
+        backgroundColor: AppColors.orderAccent,
+      ),
+    );
+  }
+
   void _goHome(BuildContext context) {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const HomeView()),
       (_) => false,
-    );
-  }
-
-  void _showPrintPending(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tính năng in PDF chưa được kết nối.')),
     );
   }
 }
@@ -195,15 +236,23 @@ class _OrderTopBar extends StatelessWidget {
 class _OrderDetailContent extends StatelessWidget {
   const _OrderDetailContent({
     required this.order,
+    required this.cancellingDishId,
+    required this.isExportingReceipt,
     required this.onRefresh,
     required this.onHome,
     required this.onPrint,
+    required this.onCancelItem,
+    required this.canCancelItem,
   });
 
   final OrderDetailModel order;
+  final int cancellingDishId;
+  final bool isExportingReceipt;
   final Future<void> Function() onRefresh;
   final VoidCallback onHome;
   final VoidCallback onPrint;
+  final ValueChanged<OrderItemModel> onCancelItem;
+  final bool Function(OrderItemModel item) canCancelItem;
 
   @override
   Widget build(BuildContext context) {
@@ -226,13 +275,24 @@ class _OrderDetailContent extends StatelessWidget {
             ...order.items.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 14),
-                child: OrderItemTile(item: item),
+                child: OrderItemTile(
+                  item: item,
+                  isCancelling: cancellingDishId == item.dishId,
+                  onCancel: canCancelItem(item)
+                      ? () => onCancelItem(item)
+                      : null,
+                ),
               ),
             ),
           const SizedBox(height: 8),
           OrderTotalPanel(order: order),
           const SizedBox(height: 20),
-          if (paid) _PaidActions(onHome: onHome, onPrint: onPrint),
+          if (paid)
+            _PaidActions(
+              onHome: onHome,
+              onPrint: onPrint,
+              isExportingReceipt: isExportingReceipt,
+            ),
         ],
       ),
     );
@@ -278,10 +338,15 @@ class _SectionHeading extends StatelessWidget {
 }
 
 class _PaidActions extends StatelessWidget {
-  const _PaidActions({required this.onHome, required this.onPrint});
+  const _PaidActions({
+    required this.onHome,
+    required this.onPrint,
+    required this.isExportingReceipt,
+  });
 
   final VoidCallback onHome;
   final VoidCallback onPrint;
+  final bool isExportingReceipt;
 
   @override
   Widget build(BuildContext context) {
@@ -302,8 +367,8 @@ class _PaidActions extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         AppSurfaceCommandButton(
-          label: 'In PDF',
-          onTap: onPrint,
+          label: isExportingReceipt ? 'Đang xuất PDF...' : 'In PDF',
+          onTap: isExportingReceipt ? () {} : onPrint,
           height: 56,
           backgroundColor: const Color(0xFFDDE3EC),
           labelColor: AppColors.orderAccent,

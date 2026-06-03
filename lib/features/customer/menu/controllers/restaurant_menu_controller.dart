@@ -151,6 +151,12 @@ class RestaurantMenuController extends GetxController {
     cartQuantities[dish.dishId] = quantityFor(dish);
   }
 
+  void removeDishFromCart(DishModel dish) {
+    cartQuantities.remove(dish.dishId);
+    draftQuantities.remove(dish.dishId);
+    notes.remove(dish.dishId);
+  }
+
   void saveNote(DishModel dish, String note) {
     final trimmed = note.trim();
     if (trimmed.isEmpty) {
@@ -210,9 +216,9 @@ class RestaurantMenuController extends GetxController {
   String get _guestCustomerName {
     final normalizedTableLabel = tableLabel?.trim();
     if (normalizedTableLabel == null || normalizedTableLabel.isEmpty) {
-      return 'Guest';
+      return 'Khách vãng lai';
     }
-    return 'Guest - Table $normalizedTableLabel';
+    return 'Khách vãng lai - Bàn $normalizedTableLabel';
   }
 
   @override

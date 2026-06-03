@@ -2,15 +2,22 @@ import 'package:get/get.dart';
 
 import '../data/models/order_detail_model.dart';
 import '../data/services/order_history_service.dart';
+import '../data/services/order_receipt_service.dart';
 
 class OrderHistoryController extends GetxController {
-  OrderHistoryController({required OrderHistoryService orderHistoryService})
-    : _orderHistoryService = orderHistoryService;
+  OrderHistoryController({
+    required OrderHistoryService orderHistoryService,
+    required OrderReceiptService orderReceiptService,
+  }) : _orderHistoryService = orderHistoryService,
+       _orderReceiptService = orderReceiptService;
 
   final OrderHistoryService _orderHistoryService;
+  final OrderReceiptService _orderReceiptService;
 
   final RxBool isLoading = false.obs;
+  final RxBool isExportingReceipt = false.obs;
   final RxString errorMessage = ''.obs;
+  final RxString receiptMessage = ''.obs;
   final RxList<OrderDetailModel> orders = <OrderDetailModel>[].obs;
 
   @override
@@ -32,6 +39,25 @@ class OrderHistoryController extends GetxController {
       errorMessage.value = 'Không thể tải lịch sử đơn hàng.';
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<String?> exportReceiptPdf(int orderId) async {
+    isExportingReceipt.value = true;
+    receiptMessage.value = '';
+
+    try {
+      final filePath = await _orderReceiptService.exportReceiptPdf(orderId);
+      receiptMessage.value = 'Đã xuất hóa đơn PDF.';
+      return filePath;
+    } on OrderReceiptException catch (error) {
+      receiptMessage.value = error.message;
+      return null;
+    } catch (_) {
+      receiptMessage.value = 'Không thể xuất hóa đơn PDF.';
+      return null;
+    } finally {
+      isExportingReceipt.value = false;
     }
   }
 

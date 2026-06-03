@@ -13,11 +13,11 @@ class AppCustomerBottomNavBar extends StatelessWidget {
   final ValueChanged<int> onItemSelected;
 
   static const List<_CustomerNavItem> _items = [
-    _CustomerNavItem(icon: Icons.home_outlined, label: 'Home'),
-    _CustomerNavItem(icon: Icons.event_note_rounded, label: 'Bookings'),
+    _CustomerNavItem(icon: Icons.home_outlined, label: 'Trang chủ'),
+    _CustomerNavItem(icon: Icons.event_note_rounded, label: 'Đặt bàn'),
     _CustomerNavItem(icon: Icons.menu_book_rounded, label: 'Menu'),
-    _CustomerNavItem(icon: Icons.history_rounded, label: 'History'),
-    _CustomerNavItem(icon: Icons.person_outline_rounded, label: 'Profile'),
+    _CustomerNavItem(icon: Icons.history_rounded, label: 'Lịch sử'),
+    _CustomerNavItem(icon: Icons.person_outline_rounded, label: 'Tài khoản'),
   ];
 
   @override

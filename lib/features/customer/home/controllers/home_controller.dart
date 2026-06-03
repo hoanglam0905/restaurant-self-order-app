@@ -40,7 +40,7 @@ class HomeController extends GetxController {
     } on HomeDishException catch (error) {
       errorMessage.value = error.message;
     } catch (_) {
-      errorMessage.value = 'Could not load dishes.';
+      errorMessage.value = 'Không thể tải danh sách món ăn.';
     } finally {
       isLoading.value = false;
     }
