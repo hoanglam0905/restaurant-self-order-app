@@ -44,7 +44,9 @@ class _StaffNavigationShellState extends State<StaffNavigationShell> {
     if (!Get.isRegistered<SettingsController>()) {
       Get.put(
         SettingsController(
-          settingsService: const SettingsService(),
+          settingsService: SettingsService(
+            apiClient: ApiClient(),
+          ),
         ),
       );
     }

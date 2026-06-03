@@ -10,6 +10,7 @@ class OrderDetailModel {
     required this.items,
     this.customerName,
     this.reservationTime,
+    this.orderDate,
   });
 
   final int orderId;
@@ -20,6 +21,7 @@ class OrderDetailModel {
   final String paymentStatus;
   final List<OrderItemModel> items;
   final DateTime? reservationTime;
+  final DateTime? orderDate;
 
   factory OrderDetailModel.fromJson(Map<String, dynamic> json) {
     return OrderDetailModel(
@@ -35,6 +37,9 @@ class OrderDetailModel {
           .toList(),
       reservationTime: DateTime.tryParse(
         json['reservationTime']?.toString() ?? '',
+      ),
+      orderDate: DateTime.tryParse(
+        json['orderDate']?.toString() ?? '',
       ),
     );
   }
