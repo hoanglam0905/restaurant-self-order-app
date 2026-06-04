@@ -62,7 +62,9 @@ class OrderHistoryCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 3),
                           Text(
-                            _timeText(order.reservationTime),
+                            _dateTimeText(
+                              order.orderDate ?? order.reservationTime,
+                            ),
                             style: const TextStyle(
                               color: Color(0xFF9A9699),
                               fontSize: 10,
@@ -120,9 +122,12 @@ class OrderHistoryCard extends StatelessWidget {
     );
   }
 
-  String _timeText(DateTime? dateTime) {
+  String _dateTimeText(DateTime? dateTime) {
     final date = dateTime ?? DateTime.now();
-    return '${date.hour.toString().padLeft(2, '0')}:'
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year} '
+        '${date.hour.toString().padLeft(2, '0')}:'
         '${date.minute.toString().padLeft(2, '0')}:00';
   }
 }

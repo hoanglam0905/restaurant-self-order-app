@@ -38,9 +38,30 @@ class OrderDetailModel {
       reservationTime: DateTime.tryParse(
         json['reservationTime']?.toString() ?? '',
       ),
-      orderDate: DateTime.tryParse(
-        json['orderDate']?.toString() ?? '',
-      ),
+      orderDate: DateTime.tryParse(json['orderDate']?.toString() ?? ''),
+    );
+  }
+
+  OrderDetailModel copyWith({
+    String? customerName,
+    int? tableNumber,
+    String? status,
+    double? totalAmount,
+    String? paymentStatus,
+    List<OrderItemModel>? items,
+    DateTime? reservationTime,
+    DateTime? orderDate,
+  }) {
+    return OrderDetailModel(
+      orderId: orderId,
+      customerName: customerName ?? this.customerName,
+      tableNumber: tableNumber ?? this.tableNumber,
+      status: status ?? this.status,
+      totalAmount: totalAmount ?? this.totalAmount,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      items: items ?? this.items,
+      reservationTime: reservationTime ?? this.reservationTime,
+      orderDate: orderDate ?? this.orderDate,
     );
   }
 }

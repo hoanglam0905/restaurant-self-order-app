@@ -76,6 +76,11 @@ class OrderHeaderCard extends StatelessWidget {
           Row(
             children: [
               _InfoChip(
+                icon: Icons.event_note_rounded,
+                label: _dateText(order.orderDate ?? order.reservationTime),
+              ),
+              const SizedBox(width: 8),
+              _InfoChip(
                 icon: Icons.schedule_rounded,
                 label: orderStatusLabel(order.status),
               ),
@@ -89,6 +94,15 @@ class OrderHeaderCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _dateText(DateTime? date) {
+    if (date == null) {
+      return 'Chưa có ngày đặt';
+    }
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year}';
   }
 }
 

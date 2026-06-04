@@ -27,4 +27,21 @@ class OrderItemModel {
   }
 
   double get subtotal => price * quantity;
+
+  OrderItemModel copyWith({
+    int? quantity,
+    String? status,
+    String? dishName,
+    double? price,
+    String? notes,
+  }) {
+    return OrderItemModel(
+      dishId: dishId,
+      quantity: quantity ?? this.quantity,
+      status: status ?? this.status,
+      dishName: dishName ?? this.dishName,
+      price: price ?? this.price,
+      notes: notes ?? this.notes,
+    );
+  }
 }

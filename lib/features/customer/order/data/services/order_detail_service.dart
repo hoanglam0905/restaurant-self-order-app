@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 
 import '../../../../../core/config/api_config.dart';
 import '../../../../../core/network/api_client.dart';
+import '../models/customer_loyalty_balance_model.dart';
+import '../models/loyalty_points_application_model.dart';
 import '../models/order_detail_model.dart';
 import '../models/payment_process_result_model.dart';
 import '../models/vnpay_payment_model.dart';
@@ -19,6 +21,7 @@ query OrderDetail($orderId: ID!) {
     totalAmount
     paymentStatus
     reservationTime
+    orderDate
     items {
       dishId
       dishName
@@ -68,6 +71,8 @@ query OrderDetail($orderId: ID!) {
   Future<PaymentProcessResultModel> processPayment({
     required OrderDetailModel order,
     required String paymentMethod,
+    int pointsToUse = 0,
+    bool confirmPayment = true,
   }) async {
     try {
       final response = await _apiClient.dio.post<dynamic>(
@@ -76,8 +81,8 @@ query OrderDetail($orderId: ID!) {
           'orderId': order.orderId,
           'paymentMethod': paymentMethod,
           'amount': order.totalAmount,
-          'confirmPayment': true,
-          'pointsToUse': 0,
+          'confirmPayment': confirmPayment,
+          'pointsToUse': pointsToUse,
         },
       );
 
@@ -95,7 +100,75 @@ query OrderDetail($orderId: ID!) {
     }
   }
 
-  Future<VNPayPaymentModel> createVNPayPayment(OrderDetailModel order) async {
+  Future<void> requestStaffPaymentCollection({
+    required OrderDetailModel order,
+    required int customerId,
+    required String paymentMethodLabel,
+  }) async {
+    try {
+      await _apiClient.dio.post<Map<String, dynamic>>(
+        '/notifications',
+        data: {
+          'tableNumber': order.tableNumber,
+          'customerId': customerId,
+          'orderId': order.orderId,
+          'type': 'PAYMENT_REQUEST',
+          'additionalMessage':
+              'Khách yêu cầu thanh toán bằng $paymentMethodLabel.',
+        },
+      );
+    } on DioException catch (error) {
+      throw OrderDetailException(_paymentMessageFromDio(error));
+    } catch (_) {
+      throw const OrderDetailException(
+        'Không thể gửi thông báo thanh toán cho nhân viên.',
+      );
+    }
+  }
+
+  Future<LoyaltyPointsApplicationModel> applyPoints({
+    required int orderId,
+    required int pointsToUse,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/payment/apply-points',
+        data: {'orderId': orderId, 'pointsToUse': pointsToUse},
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return LoyaltyPointsApplicationModel.fromJson(data);
+      }
+      throw const OrderDetailException('Không thể áp dụng điểm thưởng.');
+    } on OrderDetailException {
+      rethrow;
+    } on DioException catch (error) {
+      throw OrderDetailException(_paymentMessageFromDio(error));
+    } catch (_) {
+      throw const OrderDetailException('Không thể áp dụng điểm thưởng.');
+    }
+  }
+
+  Future<CustomerLoyaltyBalanceModel> getCustomerLoyaltyBalance(
+    int customerId,
+  ) async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/customers/$customerId',
+      );
+      return CustomerLoyaltyBalanceModel.fromJson(response.data ?? {});
+    } on DioException catch (error) {
+      throw OrderDetailException(_orderMessageFromDio(error));
+    } catch (_) {
+      throw const OrderDetailException('Không thể tải điểm thưởng.');
+    }
+  }
+
+  Future<VNPayPaymentModel> createVNPayPayment(
+    OrderDetailModel order, {
+    int pointsToUse = 0,
+  }) async {
     try {
       final response = await _apiClient.dio.post<dynamic>(
         '/payment/vnpay',
@@ -104,7 +177,7 @@ query OrderDetail($orderId: ID!) {
           'orderInfo': 'Payment for Order: ${order.orderId}',
           'returnUrl': '${ApiConfig.baseUrl}/payment/vnpay_payment',
           'orderId': order.orderId,
-          'pointsToUse': 0,
+          'pointsToUse': pointsToUse,
         },
       );
 

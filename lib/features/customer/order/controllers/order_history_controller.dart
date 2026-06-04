@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 
+import '../../../../../core/storage/table_session_storage.dart';
+import '../data/models/customer_order_websocket_event.dart';
 import '../data/models/order_detail_model.dart';
+import '../data/services/customer_order_websocket_service.dart';
 import '../data/services/order_history_service.dart';
 import '../data/services/order_receipt_service.dart';
 
@@ -8,11 +13,19 @@ class OrderHistoryController extends GetxController {
   OrderHistoryController({
     required OrderHistoryService orderHistoryService,
     required OrderReceiptService orderReceiptService,
+    CustomerOrderWebSocketService? webSocketService,
+    TableSessionStorage? tableSessionStorage,
   }) : _orderHistoryService = orderHistoryService,
-       _orderReceiptService = orderReceiptService;
+       _orderReceiptService = orderReceiptService,
+       _webSocketService = webSocketService ?? CustomerOrderWebSocketService(),
+       _tableSessionStorage = tableSessionStorage ?? TableSessionStorage();
 
   final OrderHistoryService _orderHistoryService;
   final OrderReceiptService _orderReceiptService;
+  final CustomerOrderWebSocketService _webSocketService;
+  final TableSessionStorage _tableSessionStorage;
+
+  StreamSubscription<CustomerOrderWebSocketEvent>? _realtimeSubscription;
 
   final RxBool isLoading = false.obs;
   final RxBool isExportingReceipt = false.obs;
@@ -23,11 +36,17 @@ class OrderHistoryController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _realtimeSubscription = _webSocketService.events.listen(
+      _handleRealtimeEvent,
+    );
+    _connectRealtime();
     loadHistory();
   }
 
-  Future<void> loadHistory() async {
-    isLoading.value = true;
+  Future<void> loadHistory({bool showLoading = true}) async {
+    if (showLoading) {
+      isLoading.value = true;
+    }
     errorMessage.value = '';
 
     try {
@@ -38,7 +57,9 @@ class OrderHistoryController extends GetxController {
     } catch (_) {
       errorMessage.value = 'Không thể tải lịch sử đơn hàng.';
     } finally {
-      isLoading.value = false;
+      if (showLoading) {
+        isLoading.value = false;
+      }
     }
   }
 
@@ -66,7 +87,7 @@ class OrderHistoryController extends GetxController {
     final now = DateTime.now();
 
     for (final order in orders) {
-      final date = order.reservationTime ?? now;
+      final date = order.orderDate ?? order.reservationTime ?? now;
       final key = _isSameDay(date, now)
           ? 'HÔM NAY'
           : '${date.day.toString().padLeft(2, '0')}/'
@@ -82,5 +103,27 @@ class OrderHistoryController extends GetxController {
     return left.year == right.year &&
         left.month == right.month &&
         left.day == right.day;
+  }
+
+  Future<void> _connectRealtime() async {
+    final tableNumber = await _tableSessionStorage.readTableId();
+    if (tableNumber == null || tableNumber <= 0) {
+      return;
+    }
+    await _webSocketService.connect(tableNumber);
+  }
+
+  void _handleRealtimeEvent(CustomerOrderWebSocketEvent event) {
+    if (!event.isOrderUpdate) {
+      return;
+    }
+    unawaited(loadHistory(showLoading: false));
+  }
+
+  @override
+  void onClose() {
+    _realtimeSubscription?.cancel();
+    unawaited(_webSocketService.dispose());
+    super.onClose();
   }
 }

@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 
+import '../../../../../core/storage/auth_session_storage.dart';
+import '../data/models/customer_order_websocket_event.dart';
 import '../data/models/order_detail_model.dart';
 import '../data/models/order_item_model.dart';
+import '../data/services/customer_order_websocket_service.dart';
 import '../data/services/order_detail_service.dart';
 import '../data/services/order_receipt_service.dart';
 
 enum CustomerPaymentMethod {
   cash('CASH', 'Tiền mặt'),
-  card('CARD', 'Thẻ ngân hàng'),
+  card('CARD', 'Chuyển khoản'),
   online('ONLINE', 'VNPay');
 
   const CustomerPaymentMethod(this.apiValue, this.label);
@@ -21,20 +26,35 @@ class OrderDetailController extends GetxController {
     required OrderDetailService orderDetailService,
     required OrderReceiptService orderReceiptService,
     required this.orderId,
+    CustomerOrderWebSocketService? webSocketService,
+    AuthSessionStorage? authSessionStorage,
   }) : _orderDetailService = orderDetailService,
-       _orderReceiptService = orderReceiptService;
+       _orderReceiptService = orderReceiptService,
+       _webSocketService = webSocketService ?? CustomerOrderWebSocketService(),
+       _authSessionStorage = authSessionStorage ?? AuthSessionStorage();
 
   final OrderDetailService _orderDetailService;
   final OrderReceiptService _orderReceiptService;
+  final CustomerOrderWebSocketService _webSocketService;
+  final AuthSessionStorage _authSessionStorage;
   final int orderId;
+
+  StreamSubscription<CustomerOrderWebSocketEvent>? _realtimeSubscription;
+  int? _connectedTableNumber;
 
   final RxBool isLoading = false.obs;
   final RxBool isProcessingPayment = false.obs;
   final RxBool isExportingReceipt = false.obs;
+  final RxBool isApplyingPoints = false.obs;
   final RxInt cancellingDishId = 0.obs;
+  final RxInt availablePoints = 0.obs;
+  final RxInt appliedPointsToUse = 0.obs;
+  final RxDouble appliedDiscount = 0.0.obs;
+  final RxDouble payableAmount = 0.0.obs;
   final RxString errorMessage = ''.obs;
   final RxString paymentMessage = ''.obs;
   final RxString receiptMessage = ''.obs;
+  final RxString loyaltyMessage = ''.obs;
   final RxString vnpayPaymentUrl = ''.obs;
   final Rx<CustomerPaymentMethod> selectedPaymentMethod =
       CustomerPaymentMethod.online.obs;
@@ -45,21 +65,32 @@ class OrderDetailController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _realtimeSubscription = _webSocketService.events.listen(
+      _handleRealtimeEvent,
+    );
+    _loadLoyaltyBalance();
     loadOrder();
   }
 
-  Future<void> loadOrder() async {
-    isLoading.value = true;
+  Future<void> loadOrder({bool showLoading = true}) async {
+    if (showLoading) {
+      isLoading.value = true;
+    }
     errorMessage.value = '';
 
     try {
-      order.value = await _orderDetailService.getOrderDetail(orderId);
+      final result = await _orderDetailService.getOrderDetail(orderId);
+      order.value = result;
+      payableAmount.value = _payableAmountFor(result);
+      await _connectRealtime(result.tableNumber);
     } on OrderDetailException catch (error) {
       errorMessage.value = error.message;
     } catch (_) {
       errorMessage.value = 'Không thể tải đơn hàng.';
     } finally {
-      isLoading.value = false;
+      if (showLoading) {
+        isLoading.value = false;
+      }
     }
   }
 
@@ -82,6 +113,7 @@ class OrderDetailController extends GetxController {
       final result = await _orderDetailService.processPayment(
         order: currentOrder,
         paymentMethod: method.apiValue,
+        pointsToUse: appliedPointsToUse.value,
       );
       paymentMessage.value = result.message;
       await loadOrder();
@@ -91,6 +123,54 @@ class OrderDetailController extends GetxController {
       return false;
     } catch (_) {
       paymentMessage.value = 'Không thể xử lý thanh toán.';
+      return false;
+    } finally {
+      isProcessingPayment.value = false;
+    }
+  }
+
+  Future<bool> requestStaffPayment(CustomerPaymentMethod method) async {
+    final currentOrder = order.value;
+    if (currentOrder == null) {
+      paymentMessage.value = 'Không tìm thấy đơn hàng cần thanh toán.';
+      return false;
+    }
+
+    if (currentOrder.paymentStatus.toUpperCase() == 'PAID') {
+      paymentMessage.value = 'Đơn hàng này đã được thanh toán.';
+      return true;
+    }
+
+    final customerSession = await _authSessionStorage.readCustomerSession();
+    if (customerSession == null) {
+      paymentMessage.value = 'Vui lòng đăng nhập trước khi yêu cầu thanh toán.';
+      return false;
+    }
+
+    isProcessingPayment.value = true;
+    paymentMessage.value = '';
+
+    try {
+      await _orderDetailService.processPayment(
+        order: currentOrder,
+        paymentMethod: method.apiValue,
+        pointsToUse: appliedPointsToUse.value,
+        confirmPayment: false,
+      );
+      await _orderDetailService.requestStaffPaymentCollection(
+        order: currentOrder,
+        customerId: customerSession.customerId,
+        paymentMethodLabel: method.label,
+      );
+      paymentMessage.value =
+          'Đã gửi yêu cầu thanh toán ${method.label.toLowerCase()} cho nhân viên.';
+      await loadOrder();
+      return true;
+    } on OrderDetailException catch (error) {
+      paymentMessage.value = error.message;
+      return false;
+    } catch (_) {
+      paymentMessage.value = 'Không thể gửi yêu cầu thanh toán cho nhân viên.';
       return false;
     } finally {
       isProcessingPayment.value = false;
@@ -113,7 +193,10 @@ class OrderDetailController extends GetxController {
     paymentMessage.value = '';
 
     try {
-      final result = await _orderDetailService.createVNPayPayment(currentOrder);
+      final result = await _orderDetailService.createVNPayPayment(
+        currentOrder,
+        pointsToUse: appliedPointsToUse.value,
+      );
       vnpayPaymentUrl.value = result.paymentUrl;
       paymentMessage.value = result.message;
       return result.paymentUrl;
@@ -132,6 +215,53 @@ class OrderDetailController extends GetxController {
     selectedPaymentMethod.value = method;
     if (method != CustomerPaymentMethod.online) {
       vnpayPaymentUrl.value = '';
+    }
+  }
+
+  Future<bool> applyPoints(int pointsToUse) async {
+    final currentOrder = order.value;
+    if (currentOrder == null) {
+      loyaltyMessage.value = 'Không tìm thấy đơn hàng cần áp điểm.';
+      return false;
+    }
+
+    if (currentOrder.paymentStatus.toUpperCase() == 'PAID') {
+      loyaltyMessage.value = 'Đơn hàng này đã được thanh toán.';
+      return false;
+    }
+
+    if (pointsToUse <= 0) {
+      loyaltyMessage.value = 'Vui lòng nhập số điểm muốn sử dụng.';
+      return false;
+    }
+
+    if (availablePoints.value > 0 && pointsToUse > availablePoints.value) {
+      loyaltyMessage.value = 'Số điểm sử dụng vượt quá điểm hiện có.';
+      return false;
+    }
+
+    isApplyingPoints.value = true;
+    loyaltyMessage.value = '';
+
+    try {
+      final result = await _orderDetailService.applyPoints(
+        orderId: currentOrder.orderId,
+        pointsToUse: pointsToUse,
+      );
+      appliedPointsToUse.value = pointsToUse;
+      appliedDiscount.value = result.discount;
+      payableAmount.value = result.payableAmount;
+      loyaltyMessage.value = result.message;
+      vnpayPaymentUrl.value = '';
+      return result.success;
+    } on OrderDetailException catch (error) {
+      loyaltyMessage.value = error.message;
+      return false;
+    } catch (_) {
+      loyaltyMessage.value = 'Không thể áp dụng điểm thưởng.';
+      return false;
+    } finally {
+      isApplyingPoints.value = false;
     }
   }
 
@@ -182,5 +312,85 @@ class OrderDetailController extends GetxController {
     } finally {
       isExportingReceipt.value = false;
     }
+  }
+
+  double payableAmountFor(OrderDetailModel order) => _payableAmountFor(order);
+
+  Future<void> _loadLoyaltyBalance() async {
+    try {
+      final session = await _authSessionStorage.readCustomerSession();
+      if (session == null) {
+        return;
+      }
+      final balance = await _orderDetailService.getCustomerLoyaltyBalance(
+        session.customerId,
+      );
+      availablePoints.value = balance.points;
+    } catch (_) {
+      availablePoints.value = 0;
+    }
+  }
+
+  double _payableAmountFor(OrderDetailModel order) {
+    if (appliedDiscount.value <= 0) {
+      return order.totalAmount;
+    }
+    final payable = order.totalAmount - appliedDiscount.value;
+    return payable < 0 ? 0 : payable;
+  }
+
+  Future<void> _connectRealtime(int tableNumber) async {
+    if (tableNumber <= 0 || _connectedTableNumber == tableNumber) {
+      return;
+    }
+    _connectedTableNumber = tableNumber;
+    await _webSocketService.connect(tableNumber);
+  }
+
+  void _handleRealtimeEvent(CustomerOrderWebSocketEvent event) {
+    if (event.orderId != orderId) {
+      return;
+    }
+
+    final currentOrder = order.value;
+    if (currentOrder == null) {
+      unawaited(loadOrder(showLoading: false));
+      return;
+    }
+
+    if (event.type == CustomerOrderWebSocketEventType.orderStatusUpdated ||
+        event.type == CustomerOrderWebSocketEventType.newOrder) {
+      order.value = currentOrder.copyWith(
+        status: event.orderStatus,
+        paymentStatus: event.paymentStatus,
+      );
+      unawaited(loadOrder(showLoading: false));
+      return;
+    }
+
+    if (event.type == CustomerOrderWebSocketEventType.orderItemStatusUpdated &&
+        event.dishId != null) {
+      final updatedItems = currentOrder.items.map((item) {
+        if (item.dishId != event.dishId) {
+          return item;
+        }
+        return item.copyWith(
+          status: event.itemStatus,
+          dishName: event.dishName,
+          quantity: event.quantity,
+          notes: event.notes,
+          price: event.price,
+        );
+      }).toList();
+      order.value = currentOrder.copyWith(items: updatedItems);
+      unawaited(loadOrder(showLoading: false));
+    }
+  }
+
+  @override
+  void onClose() {
+    _realtimeSubscription?.cancel();
+    unawaited(_webSocketService.dispose());
+    super.onClose();
   }
 }
