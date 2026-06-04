@@ -14,6 +14,7 @@ import '../data/models/order_item_model.dart';
 import '../data/services/order_detail_service.dart';
 import '../data/services/order_receipt_service.dart';
 import 'order_payment_view.dart';
+import 'widgets/order_header_card.dart';
 import 'widgets/order_item_tile.dart';
 import 'widgets/order_progress_panel.dart';
 import 'widgets/order_total_panel.dart';
@@ -263,6 +264,8 @@ class _OrderDetailContent extends StatelessWidget {
       child: ListView(
         padding: EdgeInsets.fromLTRB(12, 14, 12, paid ? 24 : 96),
         children: [
+          OrderHeaderCard(order: order),
+          const SizedBox(height: 14),
           if (!paid) ...[
             OrderProgressPanel(status: order.status),
             const SizedBox(height: 14),

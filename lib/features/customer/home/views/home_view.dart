@@ -8,11 +8,13 @@ import '../../../../core/widgets/app_cta_button.dart';
 import '../../../../core/widgets/app_customer_bottom_nav_bar.dart';
 import '../../../../core/widgets/app_inline_text_link.dart';
 import '../../menu/views/menu_view.dart';
+import '../../order/data/services/order_history_service.dart';
 import '../../order/views/order_history_view.dart';
 import '../../settings/views/settings_view.dart';
 import '../controllers/call_staff_controller.dart';
 import '../controllers/home_controller.dart';
 import '../data/models/table_qr_payload.dart';
+import '../data/services/call_staff_order_lookup_service.dart';
 import '../data/services/home_dish_service.dart';
 import '../data/services/home_notification_service.dart';
 import 'table_qr_scan_view.dart';
@@ -46,6 +48,8 @@ class _HomeViewState extends State<HomeView> {
     _callStaffController = Get.put(
       CallStaffController(
         notificationService: HomeNotificationService(apiClient),
+        orderHistoryService: OrderHistoryService(apiClient),
+        orderLookupService: CallStaffOrderLookupService(apiClient),
       ),
     );
   }
@@ -127,101 +131,48 @@ class _HomeViewState extends State<HomeView> {
   }
 
   Future<void> _showCallStaffDialog(BuildContext context) async {
-    final requirementController = TextEditingController();
     _callStaffController.errorMessage.value = '';
+
+    TableQrPayload? scannedPayload;
+    final requiresGuestTableScan =
+        await _callStaffController.requiresGuestTableScan;
+    if (!context.mounted) {
+      return;
+    }
+
+    if (requiresGuestTableScan) {
+      scannedPayload = await Navigator.push<TableQrPayload>(
+        context,
+        MaterialPageRoute(builder: (_) => const TableQrScanView()),
+      );
+      if (!context.mounted || scannedPayload == null) {
+        return;
+      }
+    }
+
+    final target = await _callStaffController.resolveTarget(
+      scannedTableNumber: scannedPayload?.tableId,
+    );
+    if (!context.mounted) {
+      return;
+    }
+
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_callStaffController.errorMessage.value),
+          backgroundColor: AppColors.orderAccent,
+        ),
+      );
+      return;
+    }
 
     final sent = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          title: const Text(
-            'Gọi nhân viên',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Nhập nhu cầu để nhân viên trong ca nắm rõ trước khi đến bàn.',
-                style: TextStyle(
-                  color: Color(0xFF5D5E61),
-                  fontSize: 14,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: requirementController,
-                minLines: 3,
-                maxLines: 4,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  hintText: 'Ví dụ: cần thêm nước, đổi muỗng, hỗ trợ món...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              Obx(() {
-                if (_callStaffController.errorMessage.value.isEmpty) {
-                  return const SizedBox(height: 14);
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    _callStaffController.errorMessage.value,
-                    style: const TextStyle(
-                      color: Color(0xFFC0392B),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-          actions: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Obx(
-                  () => AppCtaButton(
-                    label: _callStaffController.isSending.value
-                        ? 'Đang gửi...'
-                        : 'Gửi yêu cầu',
-                    onPressed: () async {
-                      final success = await _callStaffController.callStaff(
-                        requirementController.text,
-                      );
-                      if (success && dialogContext.mounted) {
-                        Navigator.pop(dialogContext, true);
-                      }
-                    },
-                    enabled: !_callStaffController.isSending.value,
-                    height: 46,
-                    borderRadius: 8,
-                    fontSize: 15,
-                    backgroundColor: AppColors.orderAccent,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                AppInlineTextLink(
-                  label: 'Hủy',
-                  onTap: () => Navigator.pop(dialogContext, false),
-                  textColor: AppColors.orderAccent,
-                  fontSize: 14,
-                ),
-              ],
-            ),
-          ],
-        );
-      },
+      builder: (_) =>
+          _CallStaffDialog(controller: _callStaffController, target: target),
     );
 
-    requirementController.dispose();
     if (!context.mounted || sent != true) {
       return;
     }
@@ -275,6 +226,131 @@ class _HomeViewState extends State<HomeView> {
           tableLabel: payload.tableLabel,
         ),
       ),
+    );
+  }
+}
+
+class _CallStaffDialog extends StatefulWidget {
+  const _CallStaffDialog({required this.controller, required this.target});
+
+  final CallStaffController controller;
+  final CallStaffTarget target;
+
+  @override
+  State<_CallStaffDialog> createState() => _CallStaffDialogState();
+}
+
+class _CallStaffDialogState extends State<_CallStaffDialog> {
+  late final TextEditingController _requirementController;
+
+  @override
+  void initState() {
+    super.initState();
+    _requirementController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _requirementController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      title: const Text(
+        'Gọi nhân viên',
+        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Nhập nhu cầu để nhân viên trong ca nắm rõ trước khi đến bàn.',
+            style: TextStyle(
+              color: Color(0xFF5D5E61),
+              fontSize: 14,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Bàn ${widget.target.tableNumber.toString().padLeft(2, '0')}',
+            style: const TextStyle(
+              color: AppColors.orderAccent,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _requirementController,
+            minLines: 3,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              hintText: 'Ví dụ: cần thêm nước, đổi muỗng, hỗ trợ món...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          Obx(() {
+            if (widget.controller.errorMessage.value.isEmpty) {
+              return const SizedBox(height: 14);
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                widget.controller.errorMessage.value,
+                style: const TextStyle(
+                  color: Color(0xFFC0392B),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+      actions: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Obx(
+              () => AppCtaButton(
+                label: widget.controller.isSending.value
+                    ? 'Đang gửi...'
+                    : 'Gửi yêu cầu',
+                onPressed: () async {
+                  final success = await widget.controller.callStaff(
+                    target: widget.target,
+                    requirement: _requirementController.text,
+                  );
+                  if (success && context.mounted) {
+                    Navigator.pop(context, true);
+                  }
+                },
+                enabled: !widget.controller.isSending.value,
+                height: 46,
+                borderRadius: 8,
+                fontSize: 15,
+                backgroundColor: AppColors.orderAccent,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AppInlineTextLink(
+              label: 'Hủy',
+              onTap: () => Navigator.pop(context, false),
+              textColor: AppColors.orderAccent,
+              fontSize: 14,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

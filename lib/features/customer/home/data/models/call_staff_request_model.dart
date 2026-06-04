@@ -1,8 +1,8 @@
 class CallStaffRequestModel {
   const CallStaffRequestModel({
     required this.tableNumber,
-    required this.customerId,
     required this.additionalMessage,
+    required this.customerId,
     this.orderId,
   });
 

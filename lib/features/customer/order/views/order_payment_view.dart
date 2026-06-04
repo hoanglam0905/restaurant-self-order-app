@@ -11,6 +11,7 @@ import '../../../../core/utils/app_price_formatter.dart';
 import '../../../../core/utils/download_file.dart';
 import '../../../../core/widgets/app_back_icon_button.dart';
 import '../../../../core/widgets/app_cta_button.dart';
+import '../../../../core/widgets/app_labeled_auth_text_field.dart';
 import '../../../../core/widgets/app_surface_command_button.dart';
 import '../controllers/order_detail_controller.dart';
 import '../data/models/order_detail_model.dart';
@@ -154,7 +155,7 @@ class OrderPaymentView extends StatelessWidget {
       return;
     }
 
-    final success = await controller.processPayment(method);
+    final success = await controller.requestStaffPayment(method);
     if (!context.mounted) {
       return;
     }
@@ -165,14 +166,14 @@ class OrderPaymentView extends StatelessWidget {
           controller.paymentMessage.value.isNotEmpty
               ? controller.paymentMessage.value
               : success
-              ? 'Thanh toán thành công.'
-              : 'Không thể xử lý thanh toán.',
+              ? 'Đã gửi yêu cầu thanh toán cho nhân viên.'
+              : 'Không thể gửi yêu cầu thanh toán.',
         ),
       ),
     );
 
     if (success) {
-      Navigator.pop(context, true);
+      Navigator.pop(context, false);
     }
   }
 
@@ -523,7 +524,10 @@ class _InvoiceCard extends StatelessWidget {
             value: 'Bàn #${order.tableNumber}',
             bold: true,
           ),
-          _InvoiceRow(label: 'Ngày đặt', value: _dateText(DateTime.now())),
+          _InvoiceRow(
+            label: 'Ngày đặt',
+            value: _dateText(order.orderDate ?? order.reservationTime),
+          ),
           const SizedBox(height: 14),
           const Divider(height: 1, color: Color(0xFFECE5E3)),
           const SizedBox(height: 12),
@@ -556,37 +560,198 @@ class _InvoiceCard extends StatelessWidget {
           const SizedBox(height: 12),
           _PaymentMethodRow(controller: controller),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Tổng cộng',
-                  style: TextStyle(
-                    color: Color(0xFF161C23),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+          _LoyaltyPointsPanel(controller: controller),
+          const SizedBox(height: 14),
+          Obx(
+            () => Column(
+              children: [
+                if (controller.appliedDiscount.value > 0) ...[
+                  _InvoiceRow(
+                    label: 'Giá trị đơn',
+                    value: formatAppPrice(
+                      order.totalAmount,
+                      withCurrency: true,
+                    ),
                   ),
+                  _InvoiceRow(
+                    label: 'Giảm điểm',
+                    value:
+                        '-${formatAppPrice(controller.appliedDiscount.value, withCurrency: true)}',
+                  ),
+                ],
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Tổng cộng',
+                        style: TextStyle(
+                          color: Color(0xFF161C23),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      formatAppPrice(
+                        controller.payableAmountFor(order),
+                        withCurrency: true,
+                      ),
+                      style: const TextStyle(
+                        color: AppColors.orderAccent,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Text(
-                formatAppPrice(order.totalAmount, withCurrency: true),
-                style: const TextStyle(
-                  color: AppColors.orderAccent,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  String _dateText(DateTime date) {
+  String _dateText(DateTime? date) {
+    if (date == null) {
+      return '--/--/----';
+    }
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year}';
+  }
+}
+
+class _LoyaltyPointsPanel extends StatefulWidget {
+  const _LoyaltyPointsPanel({required this.controller});
+
+  final OrderDetailController controller;
+
+  @override
+  State<_LoyaltyPointsPanel> createState() => _LoyaltyPointsPanelState();
+}
+
+class _LoyaltyPointsPanelState extends State<_LoyaltyPointsPanel> {
+  late final TextEditingController _pointsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pointsController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _pointsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final availablePoints = widget.controller.availablePoints.value;
+      final appliedPoints = widget.controller.appliedPointsToUse.value;
+      final loading = widget.controller.isApplyingPoints.value;
+
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7F4),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFEDE3E1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.stars_rounded,
+                  color: AppColors.orderAccent,
+                  size: 18,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Điểm hiện có: $availablePoints',
+                    style: const TextStyle(
+                      color: Color(0xFF161C23),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (appliedPoints > 0)
+                  Text(
+                    'Đã dùng $appliedPoints',
+                    style: const TextStyle(
+                      color: AppColors.orderAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            AppLabeledAuthTextField(
+              label: 'Sử dụng điểm',
+              controller: _pointsController,
+              hintText: 'Nhập số điểm',
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              prefixIcon: const Icon(
+                Icons.redeem_rounded,
+                color: AppColors.orderAccent,
+                size: 18,
+              ),
+              onSubmitted: (_) => _applyPoints(),
+            ),
+            const SizedBox(height: 10),
+            AppCtaButton(
+              label: loading ? 'Đang áp dụng...' : 'Áp dụng điểm',
+              onPressed: _applyPoints,
+              backgroundColor: AppColors.orderAccent,
+              borderRadius: 8,
+              height: 44,
+              fontSize: 13,
+              enabled: !loading,
+              trailing: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+            ),
+            if (widget.controller.loyaltyMessage.value.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                widget.controller.loyaltyMessage.value,
+                style: TextStyle(
+                  color: widget.controller.appliedPointsToUse.value > 0
+                      ? const Color(0xFF3F8E3D)
+                      : const Color(0xFFB3261E),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+
+  void _applyPoints() {
+    final pointsToUse = int.tryParse(_pointsController.text.trim()) ?? 0;
+    widget.controller.applyPoints(pointsToUse);
   }
 }
 
