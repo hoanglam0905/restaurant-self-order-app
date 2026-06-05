@@ -6,6 +6,7 @@ import '../data/models/staff_table_model.dart';
 import '../data/models/table_status.dart';
 import 'order_reservation_view.dart';
 import 'widgets/table_card.dart';
+import '../data/models/table_notification_model.dart';
 
 class TableManagementView extends StatelessWidget {
   const TableManagementView({super.key});
@@ -812,510 +813,514 @@ class TableManagementView extends StatelessWidget {
       },
     );
   }
+Future<void> _onTableAlertTapped(
+  BuildContext context,
+  StaffTableModel table,
+) async {
+  final controller = Get.find<TableController>();
 
-  void _onTableAlertTapped(BuildContext context, StaffTableModel table) {
-    final alerts = _buildMockAlertsForTable(
-      table,
-    ).map((e) => e.copyWith()).toList();
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF9E3A14)),
+      );
+    },
+  );
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      enableDrag: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final unreadCount = alerts
-                .where((item) => item.status == _TableAlertStatus.unread)
-                .length;
-            final readCount = alerts.length - unreadCount;
+  final notifications = await controller.getTableNotifications(table.id);
 
-            void updateStatus(String id, _TableAlertStatus status) {
-              final index = alerts.indexWhere((item) => item.id == id);
-              if (index == -1) return;
-              alerts[index] = alerts[index].copyWith(status: status);
+  if (!context.mounted) return;
+
+  Navigator.pop(context);
+
+  final alerts = notifications.map((item) => item.copyWith()).toList();
+
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    enableDrag: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      return StatefulBuilder(
+        builder: (context, setSheetState) {
+          final unreadCount = alerts
+              .where((item) => !item.isRead)
+              .length;
+          final readCount = alerts.length - unreadCount;
+
+          void updateLocalStatus(int id, bool isRead) {
+            final index = alerts.indexWhere((item) => item.id == id);
+            if (index == -1) return;
+
+            alerts[index] = alerts[index].copyWith(isRead: isRead);
+          }
+
+          Future<void> markOneAsRead(TableNotificationModel alert) async {
+            if (alert.isRead) return;
+
+            final success =
+                await controller.markNotificationAsReadAndRefresh(alert.id);
+
+            if (!context.mounted) return;
+
+            if (!success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(controller.errorMessage.value),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
             }
 
-            return DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.86,
-              minChildSize: 0.45,
-              maxChildSize: 0.95,
-              builder: (context, scrollController) {
-                return Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                  ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10),
-                      Container(
-                        width: 44,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFD6DAE3),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+            setSheetState(() {
+              updateLocalStatus(alert.id, true);
+            });
+          }
+
+          Future<void> markAllAsRead() async {
+            final success =
+                await controller.markAllNotificationsAsReadForTable(table.id);
+
+            if (!context.mounted) return;
+
+            if (!success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(controller.errorMessage.value),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+
+            setSheetState(() {
+              for (var i = 0; i < alerts.length; i++) {
+                alerts[i] = alerts[i].copyWith(isRead: true);
+              }
+            });
+          }
+
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.86,
+            minChildSize: 0.45,
+            maxChildSize: 0.95,
+            builder: (context, scrollController) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD6DAE3),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 14, 10),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Thông báo chi tiết',
-                                    style: TextStyle(
-                                      color: Color(0xFF232938),
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w900,
-                                      height: 1.05,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'BÀN ${table.tableNumber}',
-                                    style: const TextStyle(
-                                      color: Color(0xFFB63F1D),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.8,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              style: IconButton.styleFrom(
-                                backgroundColor: const Color(0xFFF0F3F8),
-                                minimumSize: const Size(36, 36),
-                              ),
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Color(0xFF576073),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1, color: Color(0xFFE8ECF3)),
-                      Expanded(
-                        child: ListView(
-                          controller: scrollController,
-                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-                          children: [
-                            _buildAlertSectionTitle('HÔM NAY'),
-                            const SizedBox(height: 10),
-                            if (alerts.isEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: const Color(0xFFE8ECF3),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Không có thông báo mới cho bàn này.',
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 14, 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Thông báo chi tiết',
                                   style: TextStyle(
-                                    color: Color(0xFF6C7587),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF232938),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.05,
                                   ),
                                 ),
-                              )
-                            else
-                              ...alerts.map(
-                                (alert) => _buildAlertCard(
-                                  alert,
-                                  onPrimaryAction: () {
-                                    setSheetState(() {
-                                      updateStatus(
-                                        alert.id,
-                                        _TableAlertStatus.read,
-                                      );
-                                    });
-                                  },
-                                  onSecondaryAction: () {
-                                    setSheetState(() {
-                                      updateStatus(
-                                        alert.id,
-                                        _TableAlertStatus.read,
-                                      );
-                                    });
-                                  },
-                                  onToggleRead: () {
-                                    setSheetState(() {
-                                      updateStatus(
-                                        alert.id,
-                                        alert.status == _TableAlertStatus.read
-                                            ? _TableAlertStatus.unread
-                                            : _TableAlertStatus.read,
-                                      );
-                                    });
-                                  },
+                                const SizedBox(height: 4),
+                                Text(
+                                  'BÀN ${table.tableNumber}',
+                                  style: const TextStyle(
+                                    color: Color(0xFFB63F1D),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8,
+                                  ),
                                 ),
-                              ),
-                            const SizedBox(height: 10),
-                            _buildAlertSectionTitle('LỊCH SỬ (12/04/2025)'),
-                            const SizedBox(height: 10),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            style: IconButton.styleFrom(
+                              backgroundColor: const Color(0xFFF0F3F8),
+                              minimumSize: const Size(36, 36),
+                            ),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Color(0xFF576073),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFE8ECF3)),
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+                        children: [
+                          _buildAlertSectionTitle('THÔNG BÁO'),
+                          const SizedBox(height: 10),
+                          if (alerts.isEmpty)
                             Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF5F7FB),
+                                color: Colors.white,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: const Color(0xFFE8ECF3),
                                 ),
                               ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                                    Icons.history_toggle_off_rounded,
-                                    color: Color(0xFF8D95A5),
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Đã đọc ${readCount + table.id + 10} yêu cầu từ bàn này trong hôm nay.',
-                                      style: const TextStyle(
-                                        color: Color(0xFF6D7587),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                              child: const Text(
+                                'Không có thông báo mới cho bàn này.',
+                                style: TextStyle(
+                                  color: Color(0xFF6C7587),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            )
+                          else
+                            ...alerts.map(
+                              (alert) => _buildAlertCard(
+                                alert,
+                                onPrimaryAction: () {
+                                  markOneAsRead(alert);
+                                },
+                                onSecondaryAction: () {
+                                  markOneAsRead(alert);
+                                },
+                              ),
+                            ),
+                          const SizedBox(height: 10),
+                          _buildAlertSectionTitle('TỔNG KẾT'),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F7FB),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFE8ECF3),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.history_toggle_off_rounded,
+                                  color: Color(0xFF8D95A5),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Đã xử lý $readCount/${alerts.length} thông báo của bàn này.',
+                                    style: const TextStyle(
+                                      color: Color(0xFF6D7587),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          border: Border(
-                            top: BorderSide(color: Color(0xFFE9EDF3)),
-                          ),
-                        ),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: ElevatedButton.icon(
-                            onPressed: unreadCount == 0
-                                ? null
-                                : () {
-                                    setSheetState(() {
-                                      for (var i = 0; i < alerts.length; i++) {
-                                        alerts[i] = alerts[i].copyWith(
-                                          status: _TableAlertStatus.read,
-                                        );
-                                      }
-                                    });
-                                  },
-                            icon: const Icon(
-                              Icons.done_all_rounded,
-                              color: Colors.white,
-                            ),
-                            label: const Text(
-                              'Tất cả đã đọc',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFB63F1D),
-                              disabledBackgroundColor: const Color(0xFFBDC4D2),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  String _alertTypeLabel(_TableAlertType type) {
-    return switch (type) {
-      _TableAlertType.callStaff => 'CALL_STAFF',
-      _TableAlertType.newOrder => 'NEW_ORDER',
-      _TableAlertType.other => 'OTHER',
-      _TableAlertType.paymentRequest => 'PAYMENT_REQUEST',
-    };
-  }
-
-  Widget _buildAlertSectionTitle(String title) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFF495062),
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(width: 8),
-        const Expanded(
-          child: Divider(height: 1, thickness: 1, color: Color(0xFFE4E8F0)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAlertCard(
-    _TableAlertItem alert, {
-    required VoidCallback onPrimaryAction,
-    required VoidCallback onSecondaryAction,
-    required VoidCallback onToggleRead,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8ECF3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF5F6F9),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(alert.icon, color: alert.accentColor, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      alert.title,
-                      style: TextStyle(
-                        color: alert.accentColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          top: BorderSide(color: Color(0xFFE9EDF3)),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F4FA),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        _alertTypeLabel(alert.type),
-                        style: const TextStyle(
-                          color: Color(0xFF5D6675),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2,
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: unreadCount == 0
+                              ? null
+                              : () {
+                                  markAllAsRead();
+                                },
+                          icon: const Icon(
+                            Icons.done_all_rounded,
+                            color: Colors.white,
+                          ),
+                          label: const Text(
+                            'Tất cả đã đọc',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFB63F1D),
+                            disabledBackgroundColor: const Color(0xFFBDC4D2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _buildAlertSectionTitle(String title) {
+  return Row(
+    children: [
+      Text(
+        title,
+        style: const TextStyle(
+          color: Color(0xFF495062),
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.8,
+        ),
+      ),
+      const SizedBox(width: 8),
+      const Expanded(
+        child: Divider(height: 1, thickness: 1, color: Color(0xFFE4E8F0)),
+      ),
+    ],
+  );
+}
+
+Widget _buildAlertCard(
+  TableNotificationModel alert, {
+  required VoidCallback onPrimaryAction,
+  required VoidCallback onSecondaryAction,
+}) {
+  final style = _notificationStyle(alert.type);
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: const Color(0xFFE8ECF3)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5F6F9),
+                shape: BoxShape.circle,
               ),
-              Text(
-                alert.timeLabel,
-                style: const TextStyle(
-                  color: Color(0xFF7A8394),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+              child: Icon(style.icon, color: style.color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    alert.title.isEmpty
+                        ? _notificationTypeLabel(alert.type)
+                        : alert.title,
+                    style: TextStyle(
+                      color: style.color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F4FA),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      alert.type,
+                      style: const TextStyle(
+                        color: Color(0xFF5D6675),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              alert.timeLabel,
+              style: const TextStyle(
+                color: Color(0xFF7A8394),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          alert.content.isEmpty ? alert.title : alert.content,
+          style: const TextStyle(
+            color: Color(0xFF222938),
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (!alert.isRead)
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 42,
+                  child: ElevatedButton(
+                    onPressed: onPrimaryAction,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFB63F1D),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      _primaryActionLabel(alert.type),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 42,
+                  child: ElevatedButton(
+                    onPressed: onSecondaryAction,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE6EAF2),
+                      foregroundColor: const Color(0xFF5F6674),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Bỏ qua',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            alert.message,
-            style: const TextStyle(
-              color: Color(0xFF222938),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              height: 1.3,
+          )
+        else
+          Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE4F5EB),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Align(
+              alignment: Alignment.center,
+              child: Text(
+                'Đã đọc',
+                style: TextStyle(
+                  color: Color(0xFF1F8A56),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          if (alert.status == _TableAlertStatus.unread)
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 42,
-                    child: ElevatedButton(
-                      onPressed: onPrimaryAction,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFB63F1D),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        alert.primaryActionLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SizedBox(
-                    height: 42,
-                    child: ElevatedButton(
-                      onPressed: onSecondaryAction,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE6EAF2),
-                        foregroundColor: const Color(0xFF5F6674),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        alert.secondaryActionLabel,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Container(
-                  height: 34,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE4F5EB),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Align(
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Đã đọc',
-                      style: TextStyle(
-                        color: Color(0xFF1F8A56),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: onToggleRead,
-                  child: const Text(
-                    'Đánh dấu chưa đọc',
-                    style: TextStyle(
-                      color: Color(0xFF5D6675),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
-  List<_TableAlertItem> _buildMockAlertsForTable(StaffTableModel table) {
-    if (table.status == TableStatus.available) {
-      return const <_TableAlertItem>[];
-    }
+String _notificationTypeLabel(String type) {
+  return switch (type) {
+    'CALL_STAFF' => 'Gọi nhân viên',
+    'NEW_ORDER' => 'Đơn món mới',
+    'PAYMENT_REQUEST' => 'Yêu cầu thanh toán',
+    _ => 'Yêu cầu khác',
+  };
+}
 
-    return <_TableAlertItem>[
-      _TableAlertItem(
-        id: 'payment-request-${table.id}',
-        title: 'Yêu cầu thanh toán',
-        message: 'Tôi cần thanh toán hóa đơn.',
-        timeLabel: _buildAlertTimeLabel(table.id, 0),
-        icon: Icons.payments_outlined,
-        accentColor: const Color(0xFFB63F1D),
-        type: _TableAlertType.paymentRequest,
-        primaryActionLabel: 'Xác nhận',
-        secondaryActionLabel: 'Bỏ qua',
-      ),
-      _TableAlertItem(
-        id: 'call-staff-${table.id}',
-        title: 'Gọi nhân viên',
-        message: 'Làm ơn cho tôi thêm nước sốt và một ít ớt tươi, cảm ơn.',
-        timeLabel: _buildAlertTimeLabel(table.id, 1),
+String _primaryActionLabel(String type) {
+  return switch (type) {
+    'CALL_STAFF' => 'Tiếp nhận',
+    'NEW_ORDER' => 'Xem đơn',
+    'PAYMENT_REQUEST' => 'Xác nhận',
+    _ => 'Ghi nhận',
+  };
+}
+
+_NotificationAlertStyle _notificationStyle(String type) {
+  return switch (type) {
+    'CALL_STAFF' => const _NotificationAlertStyle(
         icon: Icons.notifications_active_outlined,
-        accentColor: const Color(0xFF4A4F5A),
-        type: _TableAlertType.callStaff,
-        primaryActionLabel: 'Tiếp nhận',
-        secondaryActionLabel: 'Bỏ qua',
+        color: Color(0xFF4A4F5A),
       ),
-      _TableAlertItem(
-        id: 'new-order-${table.id}',
-        title: 'Đơn món mới',
-        message: 'Khách vừa thêm món mới, vui lòng kiểm tra đơn.',
-        timeLabel: _buildAlertTimeLabel(table.id, 2),
+    'NEW_ORDER' => const _NotificationAlertStyle(
         icon: Icons.receipt_long_rounded,
-        accentColor: const Color(0xFF2D5E9E),
-        type: _TableAlertType.newOrder,
-        primaryActionLabel: 'Xem đơn',
-        secondaryActionLabel: 'Đã rõ',
+        color: Color(0xFF2D5E9E),
       ),
-      _TableAlertItem(
-        id: 'other-${table.id}',
-        title: 'Yêu cầu khác',
-        message: 'Khách cần đổi bát và xin thêm khăn giấy.',
-        timeLabel: _buildAlertTimeLabel(table.id, 3),
+    'PAYMENT_REQUEST' => const _NotificationAlertStyle(
+        icon: Icons.payments_outlined,
+        color: Color(0xFFB63F1D),
+      ),
+    _ => const _NotificationAlertStyle(
         icon: Icons.info_outline_rounded,
-        accentColor: const Color(0xFF7A5A1A),
-        type: _TableAlertType.other,
-        primaryActionLabel: 'Ghi nhận',
-        secondaryActionLabel: 'Bỏ qua',
+        color: Color(0xFF7A5A1A),
       ),
-    ];
-  }
+  };
+}
+
 
   String _buildAlertTimeLabel(int tableId, int step) {
     final hour = 18 + ((tableId + step) % 2);
@@ -1943,4 +1948,13 @@ class _TableAlertItem {
       secondaryActionLabel: secondaryActionLabel,
     );
   }
+}
+class _NotificationAlertStyle {
+  const _NotificationAlertStyle({
+    required this.icon,
+    required this.color,
+  });
+
+  final IconData icon;
+  final Color color;
 }

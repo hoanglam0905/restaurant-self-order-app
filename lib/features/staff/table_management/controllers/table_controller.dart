@@ -1,16 +1,20 @@
 ﻿import 'package:get/get.dart';
 
 import '../data/models/staff_table_model.dart';
+import '../data/models/table_notification_model.dart';
 import '../data/models/table_status.dart';
 import '../data/services/table_service.dart';
 
 class TableController extends GetxController {
   TableController({required TableService tableService})
-      : _tableService = tableService;
+    : _tableService = tableService;
 
   final TableService _tableService;
 
   final RxList<StaffTableModel> tables = <StaffTableModel>[].obs;
+  final RxMap<int, List<TableNotificationModel>> tableNotificationsByTableId =
+      <int, List<TableNotificationModel>>{}.obs;
+
   final RxBool isLoading = false.obs;
   final RxBool isActionLoading = false.obs;
   final RxString errorMessage = ''.obs;
@@ -31,7 +35,32 @@ class TableController extends GetxController {
 
     try {
       final fetchedTables = await _tableService.getTables();
-      tables.assignAll(fetchedTables);
+
+      List<TableNotificationModel> currentNotifications =
+          <TableNotificationModel>[];
+
+      try {
+        currentNotifications =
+            await _tableService.getCurrentShiftNotifications();
+      } catch (_) {
+        currentNotifications = <TableNotificationModel>[];
+      }
+
+      _cacheNotificationsByTable(currentNotifications);
+
+      final unreadTableIds = currentNotifications
+          .where((notification) => !notification.isRead)
+          .map((notification) => notification.tableNumber)
+          .whereType<int>()
+          .toSet();
+
+      tables.assignAll(
+        fetchedTables.map((table) {
+          return table.copyWith(
+            hasAlert: unreadTableIds.contains(table.id),
+          );
+        }).toList(),
+      );
     } catch (e) {
       errorMessage.value = e.toString();
     } finally {
@@ -48,6 +77,92 @@ class TableController extends GetxController {
     } catch (e) {
       errorMessage.value = e.toString();
       return null;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
+  Future<List<TableNotificationModel>> getTableNotifications(int tableId) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      final notifications = await _tableService.getNotificationsByTable(tableId);
+
+      tableNotificationsByTableId[tableId] = notifications;
+      _refreshTableAlertsFromCache();
+
+      return notifications;
+    } catch (e) {
+      final cached = tableNotificationsByTableId[tableId];
+
+      if (cached != null) {
+        return cached;
+      }
+
+      errorMessage.value = e.toString();
+      return <TableNotificationModel>[];
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
+  Future<bool> markNotificationAsReadAndRefresh(int notificationId) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      await _tableService.markNotificationAsRead(notificationId);
+
+      _updateCachedNotificationReadStatus(
+        notificationId: notificationId,
+        isRead: true,
+      );
+
+      await loadTables();
+      return true;
+    } catch (e) {
+      errorMessage.value = e.toString();
+      return false;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
+  Future<bool> markAllNotificationsAsReadForTable(int tableId) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      var notifications = tableNotificationsByTableId[tableId];
+
+      notifications ??= await _tableService.getNotificationsByTable(tableId);
+
+      final unreadNotificationIds = notifications
+          .where((notification) => !notification.isRead)
+          .map((notification) => notification.id)
+          .toList();
+
+      if (unreadNotificationIds.isEmpty) {
+        await loadTables();
+        return true;
+      }
+
+      await _tableService.markNotificationsAsRead(unreadNotificationIds);
+
+      tableNotificationsByTableId[tableId] = notifications.map((notification) {
+        if (unreadNotificationIds.contains(notification.id)) {
+          return notification.copyWith(isRead: true);
+        }
+
+        return notification;
+      }).toList();
+
+      await loadTables();
+      return true;
+    } catch (e) {
+      errorMessage.value = e.toString();
+      return false;
     } finally {
       isActionLoading.value = false;
     }
@@ -97,6 +212,61 @@ class TableController extends GetxController {
     } finally {
       isActionLoading.value = false;
     }
+  }
+
+  void _cacheNotificationsByTable(
+    List<TableNotificationModel> notifications,
+  ) {
+    final grouped = <int, List<TableNotificationModel>>{};
+
+    for (final notification in notifications) {
+      final tableNumber = notification.tableNumber;
+
+      if (tableNumber == null) continue;
+
+      grouped.putIfAbsent(tableNumber, () => <TableNotificationModel>[]);
+      grouped[tableNumber]!.add(notification);
+    }
+
+    tableNotificationsByTableId.assignAll(grouped);
+  }
+
+  void _updateCachedNotificationReadStatus({
+    required int notificationId,
+    required bool isRead,
+  }) {
+    final updatedMap = <int, List<TableNotificationModel>>{};
+
+    for (final entry in tableNotificationsByTableId.entries) {
+      updatedMap[entry.key] = entry.value.map((notification) {
+        if (notification.id == notificationId) {
+          return notification.copyWith(isRead: isRead);
+        }
+
+        return notification;
+      }).toList();
+    }
+
+    tableNotificationsByTableId.assignAll(updatedMap);
+    _refreshTableAlertsFromCache();
+  }
+
+  void _refreshTableAlertsFromCache() {
+    final unreadTableIds = tableNotificationsByTableId.entries
+        .where(
+          (entry) =>
+              entry.value.any((notification) => !notification.isRead),
+        )
+        .map((entry) => entry.key)
+        .toSet();
+
+    tables.assignAll(
+      tables.map((table) {
+        return table.copyWith(
+          hasAlert: unreadTableIds.contains(table.id),
+        );
+      }).toList(),
+    );
   }
 
   int get totalTablesCount => tables.length;
