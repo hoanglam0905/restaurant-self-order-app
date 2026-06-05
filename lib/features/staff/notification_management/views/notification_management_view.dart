@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'notification_api_model.dart';
+import 'notification_api_service.dart';
+
 class NotificationManagementView extends StatefulWidget {
   const NotificationManagementView({super.key});
 
@@ -14,14 +17,18 @@ class _NotificationManagementViewState
   static const Color _surfaceBg = Color(0xFFFCFCFC);
   static const Color _mutedText = Color(0xFF6B7280);
 
-  late List<_NotificationGroup> _groups;
+  final NotificationApiService _notificationService = NotificationApiService();
+
+  List<_NotificationGroup> _groups = [];
   String _sortLabel = 'Thời gian';
   DateTime? _selectedDate;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _groups = _buildSeedGroups();
+    _loadNotifications();
   }
 
   @override
@@ -29,7 +36,7 @@ class _NotificationManagementViewState
     return Scaffold(
       backgroundColor: _surfaceBg,
       floatingActionButton: FloatingActionButton(
-        onPressed: _refreshMockData,
+        onPressed: _loadNotifications,
         backgroundColor: _primaryColor,
         elevation: 6,
         child: const Icon(Icons.refresh_rounded, color: Colors.white),
@@ -44,36 +51,7 @@ class _NotificationManagementViewState
               const SizedBox(height: 18),
               _buildTitleArea(context),
               const SizedBox(height: 16),
-              Expanded(
-                child: RefreshIndicator(
-                  color: _primaryColor,
-                  onRefresh: _refreshMockData,
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 96),
-                    children: [
-                      if (_visibleGroups().isEmpty)
-                        _EmptyState(
-                          selectedDate: _selectedDate == null
-                              ? ''
-                              : _formatDate(_selectedDate!),
-                          onClearDate: () {
-                            setState(() {
-                              _selectedDate = null;
-                            });
-                          },
-                        )
-                      else
-                        for (final group in _visibleGroups())
-                          _NotificationGroupSection(
-                            group: group,
-                            onProcess: _markProcessed,
-                            onDelete: _deleteNotification,
-                          ),
-                    ],
-                  ),
-                ),
-              ),
+              Expanded(child: _buildBody()),
             ],
           ),
         ),
@@ -81,7 +59,69 @@ class _NotificationManagementViewState
     );
   }
 
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: _primaryColor),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return RefreshIndicator(
+        color: _primaryColor,
+        onRefresh: _loadNotifications,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            const SizedBox(height: 70),
+            _ErrorState(
+              message: _errorMessage!,
+              onRetry: _loadNotifications,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final visibleGroups = _visibleGroups();
+
+    return RefreshIndicator(
+      color: _primaryColor,
+      onRefresh: _loadNotifications,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 96),
+        children: [
+          if (visibleGroups.isEmpty)
+            _EmptyState(
+              selectedDate: _selectedDate == null
+                  ? ''
+                  : _formatDate(_selectedDate!),
+              onClearDate: () {
+                setState(() {
+                  _selectedDate = null;
+                });
+              },
+            )
+          else
+            for (final group in visibleGroups)
+              _NotificationGroupSection(
+                group: group,
+                onProcess: _markProcessed,
+                onDelete: _deleteNotification,
+              ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader() {
+    final unreadCount = _groups.fold<int>(
+      0,
+      (count, group) =>
+          count + group.items.where((item) => !item.isProcessed).length,
+    );
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -136,31 +176,33 @@ class _NotificationManagementViewState
                 ),
               ),
             ),
-            Positioned(
-              top: -2,
-              right: -2,
-              child: Container(
-                width: 13,
-                height: 13,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFC62828),
-                  shape: BoxShape.circle,
-                  border: Border.fromBorderSide(
-                    BorderSide(color: Colors.white, width: 2),
+            if (unreadCount > 0)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 13),
+                  height: 13,
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFC62828),
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                    border: Border.fromBorderSide(
+                      BorderSide(color: Colors.white, width: 2),
+                    ),
                   ),
-                ),
-                child: const Center(
-                  child: Text(
-                    '5',
-                    style: TextStyle(
-                      fontSize: 7,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                  child: Center(
+                    child: Text(
+                      unreadCount > 9 ? '9+' : unreadCount.toString(),
+                      style: const TextStyle(
+                        fontSize: 7,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ],
@@ -215,6 +257,32 @@ class _NotificationManagementViewState
     );
   }
 
+  Future<void> _loadNotifications() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final notifications =
+          await _notificationService.getCurrentShiftNotifications();
+
+      if (!mounted) return;
+
+      setState(() {
+        _groups = _buildGroupsFromApi(notifications);
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = 'Không tải được thông báo: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
   List<_NotificationGroup> _visibleGroups() {
     final groups = List<_NotificationGroup>.from(_sortedGroups());
 
@@ -236,14 +304,9 @@ class _NotificationManagementViewState
     return groups;
   }
 
-  Future<void> _refreshMockData() async {
-    await Future<void>.delayed(const Duration(milliseconds: 650));
-    setState(() {
-      _groups = _buildSeedGroups();
-    });
-  }
+  Future<void> _markProcessed(int notificationId) async {
+    final oldGroups = _cloneGroups(_groups);
 
-  void _markProcessed(int notificationId) {
     setState(() {
       for (final group in _groups) {
         for (final item in group.items) {
@@ -254,15 +317,193 @@ class _NotificationManagementViewState
         }
       }
     });
+
+    try {
+      await _notificationService.markAsRead(notificationId);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _groups = oldGroups;
+      });
+
+      _showSnackBar('Không đánh dấu đã xử lý được: $e');
+    }
   }
 
-  void _deleteNotification(int notificationId) {
+  Future<void> _deleteNotification(int notificationId) async {
+    final oldGroups = _cloneGroups(_groups);
+
     setState(() {
       for (final group in _groups) {
         group.items.removeWhere((item) => item.id == notificationId);
       }
       _groups.removeWhere((group) => group.items.isEmpty);
     });
+
+    try {
+      await _notificationService.deleteNotification(notificationId);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _groups = oldGroups;
+      });
+
+      _showSnackBar('Không xóa thông báo được: $e');
+    }
+  }
+
+  List<_NotificationGroup> _buildGroupsFromApi(
+    List<NotificationApiModel> notifications,
+  ) {
+    final sorted = List<NotificationApiModel>.from(notifications)
+      ..sort((a, b) => b.createAt.compareTo(a.createAt));
+
+    final Map<String, List<_NotificationItem>> groupedItems = {};
+    final Map<String, DateTime> groupSortKeys = {};
+
+    for (final notification in sorted) {
+      final groupDate = DateTime(
+        notification.createAt.year,
+        notification.createAt.month,
+        notification.createAt.day,
+      );
+      final key = _formatDate(groupDate);
+
+      groupedItems.putIfAbsent(key, () => []);
+      groupedItems[key]!.add(_mapNotificationToItem(notification));
+
+      final currentSortKey = groupSortKeys[key];
+      if (currentSortKey == null || notification.createAt.isAfter(currentSortKey)) {
+        groupSortKeys[key] = notification.createAt;
+      }
+    }
+
+    final groups = groupedItems.entries.map((entry) {
+      final sortKey = groupSortKeys[entry.key] ?? DateTime.now();
+
+      return _NotificationGroup(
+        label: _getGroupLabel(sortKey),
+        sortKey: sortKey,
+        items: entry.value,
+      );
+    }).toList();
+
+    groups.sort((a, b) => b.sortKey.compareTo(a.sortKey));
+
+    return groups;
+  }
+
+  _NotificationItem _mapNotificationToItem(NotificationApiModel notification) {
+    final style = _styleForType(notification.type);
+    final tableNumber =
+        notification.tableNumber ?? _extractTableNumber(notification.title);
+
+    return _NotificationItem(
+      id: notification.notificationId,
+      tableLabel: tableNumber == null
+          ? 'Thông báo'
+          : 'Bàn T-${tableNumber.toString().padLeft(2, '0')}',
+      timeLabel: _formatTime(notification.createAt),
+      typeLabel: _typeLabel(notification.type),
+      shortLabel: _shortLabel(notification.type),
+      message: notification.content.isEmpty
+          ? notification.title
+          : '"${notification.content}"',
+      icon: style.icon,
+      accentColor: style.accentColor,
+      bubbleColor: style.bubbleColor,
+      isProcessed: notification.isRead,
+    );
+  }
+
+  _NotificationTypeStyle _styleForType(String type) {
+    switch (type) {
+      case 'NEW_ORDER':
+        return const _NotificationTypeStyle(
+          icon: Icons.restaurant_menu_rounded,
+          accentColor: Color(0xFF2563EB),
+          bubbleColor: Color(0xFFEFF6FF),
+        );
+      case 'CALL_STAFF':
+        return const _NotificationTypeStyle(
+          icon: Icons.notifications_rounded,
+          accentColor: Color(0xFF9E3A14),
+          bubbleColor: Color(0xFFF2F4F7),
+        );
+      case 'PAYMENT_REQUEST':
+        return const _NotificationTypeStyle(
+          icon: Icons.receipt_long_rounded,
+          accentColor: Color(0xFFE4572E),
+          bubbleColor: Color(0xFFEFF4FF),
+        );
+      default:
+        return const _NotificationTypeStyle(
+          icon: Icons.chat_bubble_outline_rounded,
+          accentColor: Color(0xFF94A3B8),
+          bubbleColor: Color(0xFFF1F5F9),
+        );
+    }
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'NEW_ORDER':
+        return 'ĐƠN MỚI';
+      case 'CALL_STAFF':
+        return 'GỌI NHÂN VIÊN';
+      case 'PAYMENT_REQUEST':
+        return 'THANH TOÁN';
+      default:
+        return 'HỖ TRỢ KHÁC';
+    }
+  }
+
+  String _shortLabel(String type) {
+    switch (type) {
+      case 'NEW_ORDER':
+        return 'Khách vừa đặt món';
+      case 'CALL_STAFF':
+        return 'Hỗ trợ tại bàn';
+      case 'PAYMENT_REQUEST':
+        return 'Yêu cầu tính tiền';
+      default:
+        return 'Khác';
+    }
+  }
+
+  int? _extractTableNumber(String title) {
+    final match = RegExp(r'Table\s+(\d+)').firstMatch(title);
+    if (match == null) return null;
+    return int.tryParse(match.group(1) ?? '');
+  }
+
+  List<_NotificationGroup> _cloneGroups(List<_NotificationGroup> groups) {
+    return groups
+        .map(
+          (group) => _NotificationGroup(
+            label: group.label,
+            sortKey: group.sortKey,
+            items: group.items
+                .map(
+                  (item) => _NotificationItem(
+                    id: item.id,
+                    tableLabel: item.tableLabel,
+                    timeLabel: item.timeLabel,
+                    typeLabel: item.typeLabel,
+                    shortLabel: item.shortLabel,
+                    message: item.message,
+                    icon: item.icon,
+                    accentColor: item.accentColor,
+                    bubbleColor: item.bubbleColor,
+                    isProcessed: item.isProcessed,
+                  ),
+                )
+                .toList(),
+          ),
+        )
+        .toList();
   }
 
   void _showSortSheet(BuildContext context) {
@@ -336,8 +577,24 @@ class _NotificationManagementViewState
     });
   }
 
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _getGroupLabel(DateTime date) {
+    final now = DateTime.now();
+
+    if (_isSameDay(date, now)) {
+      return 'HÔM NAY';
+    }
+
+    return _formatDate(date);
   }
 
   String _formatDate(DateTime date) {
@@ -347,70 +604,11 @@ class _NotificationManagementViewState
     return '$day/$month/$year';
   }
 
-  List<_NotificationGroup> _buildSeedGroups() {
-    return [
-      _NotificationGroup(
-        label: 'HÔM NAY',
-        sortKey: DateTime(2026, 5, 29, 10, 0),
-        items: [
-          _NotificationItem(
-            id: 1,
-            tableLabel: 'Bàn T-01',
-            timeLabel: '18:30:00',
-            typeLabel: 'THANH TOÁN',
-            shortLabel: 'Yêu cầu tính tiền',
-            message: '"Tôi muốn thanh toán bằng thẻ tín dụng."',
-            icon: Icons.receipt_long_rounded,
-            accentColor: Color(0xFFE4572E),
-            bubbleColor: Color(0xFFEFF4FF),
-            isProcessed: false,
-          ),
-          _NotificationItem(
-            id: 4,
-            tableLabel: 'Khách hàng',
-            timeLabel: '19:00:00',
-            typeLabel: 'ĐẶT BÀN',
-            shortLabel: 'Khách đã đặt bàn',
-            message:
-                '"Người dùng Nguyễn Văn A đã đặt bàn vào lúc 19:00 ngày 29/05/2026."',
-            icon: Icons.event_seat_rounded,
-            accentColor: Color(0xFF2563EB),
-            bubbleColor: Color(0xFFEFF6FF),
-            isProcessed: false,
-          ),
-          _NotificationItem(
-            id: 2,
-            tableLabel: 'Bàn T-04',
-            timeLabel: '18:10:00',
-            typeLabel: 'GHI CHÚ NHÂN VIÊN',
-            shortLabel: 'Hỗ trợ tại bàn',
-            message: '"Cho tôi xin thêm nước tương và ớt tươi, cảm ơn."',
-            icon: Icons.notifications_rounded,
-            accentColor: Color(0xFF9E3A14),
-            bubbleColor: Color(0xFFF2F4F7),
-            isProcessed: false,
-          ),
-        ],
-      ),
-      _NotificationGroup(
-        label: '12/04/2025',
-        sortKey: DateTime(2025, 4, 12, 9, 0),
-        items: [
-          _NotificationItem(
-            id: 3,
-            tableLabel: 'Bàn T-02',
-            timeLabel: '21:14:00',
-            typeLabel: 'HỖ TRỢ KHÁC',
-            shortLabel: 'Khác',
-            message: '"Cho hỏi nhà hàng có ghqtrp em không?"',
-            icon: Icons.chat_bubble_outline_rounded,
-            accentColor: Color(0xFF94A3B8),
-            bubbleColor: Color(0xFFF1F5F9),
-            isProcessed: true,
-          ),
-        ],
-      ),
-    ];
+  String _formatTime(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    final second = date.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
   }
 }
 
@@ -807,7 +1005,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               selectedDate.isEmpty
-                  ? 'Đang lọc theo ngày'
+                  ? 'Hiện chưa có thông báo nào'
                   : 'Ngày đang lọc: $selectedDate',
               style: const TextStyle(
                 fontSize: 13,
@@ -816,22 +1014,95 @@ class _EmptyState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: onClearDate,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF9E3A14),
-                side: const BorderSide(color: Color(0xFF9E3A14), width: 1.2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+            if (selectedDate.isNotEmpty)
+              OutlinedButton(
+                onPressed: onClearDate,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF9E3A14),
+                  side: const BorderSide(color: Color(0xFF9E3A14), width: 1.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Bỏ lọc ngày',
+                  style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-              child: const Text(
-                'Bỏ lọc ngày',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1F2),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: const Icon(
+              Icons.error_outline_rounded,
+              size: 34,
+              color: Color(0xFFDC2626),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Không tải được thông báo',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: onRetry,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF9E3A14),
+              side: const BorderSide(color: Color(0xFF9E3A14), width: 1.2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Text(
+              'Thử lại',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -873,4 +1144,16 @@ class _NotificationItem {
   final Color accentColor;
   final Color bubbleColor;
   bool isProcessed;
+}
+
+class _NotificationTypeStyle {
+  const _NotificationTypeStyle({
+    required this.icon,
+    required this.accentColor,
+    required this.bubbleColor,
+  });
+
+  final IconData icon;
+  final Color accentColor;
+  final Color bubbleColor;
 }

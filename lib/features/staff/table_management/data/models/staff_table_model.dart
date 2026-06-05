@@ -20,18 +20,17 @@ class StaffTableModel {
   String get tableNumber => 'T-${id.toString().padLeft(2, '0')}';
 
   factory StaffTableModel.fromJson(Map<String, dynamic> json) {
-    final tableId = (json['table_id'] as num?)?.toInt() ?? 
-                    (json['id'] as num?)?.toInt() ?? 0;
+    final tableId =
+        (json['table_id'] as num?)?.toInt() ??
+        (json['id'] as num?)?.toInt() ??
+        0;
+
     final statusVal = TableStatus.fromJson(json['status'] as String?);
 
-    // Let's add some realistic mock active times, alerts, and dishes for UI consistency
-    // based on table ID, so that the screen matches the high fidelity mockup
     String? activeTime;
     String? progress;
-    bool alert = false;
 
     if (statusVal == TableStatus.occupied) {
-      alert = tableId == 1 || tableId == 4 || tableId == 8;
       progress = '8/15 Món';
       activeTime = switch (tableId) {
         1 => '45m active',
@@ -50,7 +49,7 @@ class StaffTableModel {
       status: statusVal,
       activeTimeText: activeTime,
       orderProgressText: progress,
-      hasAlert: alert,
+      hasAlert: false,
     );
   }
 
