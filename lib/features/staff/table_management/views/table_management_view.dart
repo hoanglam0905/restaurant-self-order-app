@@ -7,6 +7,7 @@ import '../data/models/table_status.dart';
 import 'order_reservation_view.dart';
 import 'widgets/table_card.dart';
 import '../data/models/table_notification_model.dart';
+import '../data/models/table_order_model.dart';
 
 class TableManagementView extends StatelessWidget {
   const TableManagementView({super.key});
@@ -419,45 +420,50 @@ class TableManagementView extends StatelessWidget {
     );
   }
 
-  Future<void> _onTableCardTapped(
-    BuildContext context,
-    StaffTableModel table,
-  ) async {
-    if (table.status == TableStatus.available) {
-      _showEmptyTableDialog(context, table);
-      return;
-    }
-
-    final controller = Get.find<TableController>();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return const Center(
-          child: CircularProgressIndicator(color: Color(0xFF9E3A14)),
-        );
-      },
-    );
-
-    final tableDetail = await controller.getTableDetail(table.id);
-
-    if (!context.mounted) return;
-
-    Navigator.pop(context);
-
-    if (tableDetail == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(controller.errorMessage.value),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    _showTableOrderDetailSheet(context, tableDetail);
+ Future<void> _onTableCardTapped(
+  BuildContext context,
+  StaffTableModel table,
+) async {
+  if (table.status == TableStatus.available) {
+    _showEmptyTableDialog(context, table);
+    return;
   }
+
+  final controller = Get.find<TableController>();
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF9E3A14)),
+      );
+    },
+  );
+
+  final tableDetail = await controller.getTableDetail(table.id);
+  final activeOrder = await controller.getActiveOrderByTable(table.id);
+
+  if (!context.mounted) return;
+
+  Navigator.pop(context);
+
+  if (tableDetail == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(controller.errorMessage.value),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
+
+  _showTableOrderDetailSheet(
+    context,
+    tableDetail,
+    activeOrder,
+  );
+}
 
   void _showEmptyTableDialog(BuildContext context, StaffTableModel table) {
     showDialog<void>(
@@ -535,12 +541,22 @@ class TableManagementView extends StatelessWidget {
     );
   }
 
-  void _showTableOrderDetailSheet(BuildContext context, StaffTableModel table) {
-    final items = _buildMockOrderItemsForTable(table);
-    final subtotal = items.fold<int>(0, (sum, item) => sum + item.totalPrice);
-    final serviceTax = (subtotal * 0.12).round();
-    final total = subtotal + serviceTax;
-    final etaText = _estimateEtaLabel(table.id);
+  void _showTableOrderDetailSheet(
+  BuildContext context,
+  StaffTableModel table,
+  TableOrderModel? order,
+)  {
+    final items = order?.items ?? const <TableOrderItemModel>[];
+final itemSubtotal = items.fold<int>(
+  0,
+  (sum, item) => sum + (item.totalPrice ?? 0),
+);
+final subtotal = order?.totalAmount != null && order!.totalAmount > 0
+    ? order.totalAmount
+    : itemSubtotal;
+final serviceTax = (subtotal * 0.12).round();
+final total = subtotal + serviceTax;
+final etaText = _estimateEtaLabel(table.id);
 
     showModalBottomSheet<void>(
       context: context,
@@ -632,19 +648,38 @@ class TableManagementView extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        ...items.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _buildOrderItemCard(item),
+                        if (items.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFECE0DD)),
+                            ),
+                            child: const Text(
+                              'Chưa có món nào trong order của bàn này.',
+                              style: TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        else
+                          ...items.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _buildOrderItemCard(item),
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 8),
                         _buildOrderSummaryCard(
-                          table: table,
-                          subtotal: subtotal,
-                          serviceTax: serviceTax,
-                          total: total,
-                        ),
+                        table: table,
+                        order: order,
+                        subtotal: subtotal,
+                        serviceTax: serviceTax,
+                        total: total,
+                      ),
                       ],
                     ),
                   ),
@@ -1459,104 +1494,118 @@ _NotificationAlertStyle _notificationStyle(String type) {
     );
   }
 
-  Widget _buildOrderItemCard(_TableOrderItem item) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFECE0DD)),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.network(
-              item.imageUrl,
-              width: 72,
-              height: 58,
-              fit: BoxFit.cover,
-              errorBuilder: (context, _, __) => Container(
-                width: 72,
-                height: 58,
-                color: const Color(0xFFE7EAF0),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.image_not_supported_outlined,
-                  color: Color(0xFF9CA3AF),
+  Widget _buildOrderItemCard(TableOrderItemModel item) {
+  final hasImage = item.imageUrl != null && item.imageUrl!.trim().isNotEmpty;
+  final priceText = item.totalPrice == null
+      ? 'Đang cập nhật giá'
+      : _formatCurrency(item.totalPrice!);
+
+  return Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFECE0DD)),
+    ),
+    child: Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: hasImage
+              ? Image.network(
+                  item.imageUrl!,
+                  width: 72,
+                  height: 58,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, _, __) => _buildDishPlaceholder(),
+                )
+              : _buildDishPlaceholder(),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.name,
+                      style: const TextStyle(
+                        color: Color(0xFF222938),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF6E5DF),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      'x${item.quantity}',
+                      style: const TextStyle(
+                        color: Color(0xFFB63F1D),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                item.note.trim().isEmpty
+                    ? 'Ghi chú: Không có'
+                    : 'Ghi chú: ${item.note}',
+                style: const TextStyle(
+                  color: Color(0xFF7B808D),
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        style: const TextStyle(
-                          color: Color(0xFF222938),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF6E5DF),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        'x${item.quantity}',
-                        style: const TextStyle(
-                          color: Color(0xFFB63F1D),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Ghi chú: ${item.note}',
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  priceText,
                   style: const TextStyle(
-                    color: Color(0xFF7B808D),
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
+                    color: Color(0xFFB63F1D),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    _formatCurrency(item.totalPrice),
-                    style: const TextStyle(
-                      color: Color(0xFFB63F1D),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildDishPlaceholder() {
+  return Container(
+    width: 72,
+    height: 58,
+    color: const Color(0xFFE7EAF0),
+    alignment: Alignment.center,
+    child: const Icon(
+      Icons.restaurant_menu_rounded,
+      color: Color(0xFF9CA3AF),
+    ),
+  );
+}
 
   Widget _buildOrderSummaryCard({
     required StaffTableModel table,
+    required TableOrderModel? order,
     required int subtotal,
     required int serviceTax,
     required int total,
@@ -1594,7 +1643,9 @@ _NotificationAlertStyle _notificationStyle(String type) {
               ),
               const SizedBox(width: 6),
               Text(
-                'Mã đơn: #BA-${(table.id + 923).toString().padLeft(4, '0')}',
+                order == null
+                ? 'Mã đơn: Chưa có'
+                : 'Mã đơn: #${order.orderId}',
                 style: const TextStyle(
                   color: Color(0xFF4A4A4F),
                   fontSize: 13,
