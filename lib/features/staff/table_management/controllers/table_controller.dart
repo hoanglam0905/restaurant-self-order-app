@@ -1,5 +1,7 @@
 ﻿import 'package:get/get.dart';
 
+import '../../dish_management/data/models/staff_kitchen_order_model.dart';
+import '../../dish_management/data/services/kitchen_service.dart';
 import '../data/models/staff_table_model.dart';
 import '../data/models/table_notification_model.dart';
 import '../data/models/table_status.dart';
@@ -10,6 +12,7 @@ class TableController extends GetxController {
     : _tableService = tableService;
 
   final TableService _tableService;
+  final KitchenService _kitchenService = KitchenService();
 
   final RxList<StaffTableModel> tables = <StaffTableModel>[].obs;
   final RxMap<int, List<TableNotificationModel>> tableNotificationsByTableId =
@@ -74,6 +77,42 @@ class TableController extends GetxController {
 
     try {
       return await _tableService.getTableById(tableId);
+    } catch (e) {
+      errorMessage.value = e.toString();
+      return null;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
+  Future<StaffKitchenOrderModel?> getActiveOrderByTable(int tableId) async {
+    isActionLoading.value = true;
+    errorMessage.value = '';
+
+    try {
+      final orders = await _kitchenService.getKitchenOrders();
+
+      final tableCode = 'T-${tableId.toString().padLeft(2, '0')}';
+
+      final tableOrders = orders.where((order) {
+        return order.tableNumber == tableCode;
+      }).toList();
+
+      if (tableOrders.isEmpty) {
+        return null;
+      }
+
+      tableOrders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      final activeOrders = tableOrders.where((order) {
+        return order.status != KitchenOrderStatus.completed;
+      }).toList();
+
+      if (activeOrders.isNotEmpty) {
+        return activeOrders.first;
+      }
+
+      return tableOrders.first;
     } catch (e) {
       errorMessage.value = e.toString();
       return null;
@@ -254,8 +293,7 @@ class TableController extends GetxController {
   void _refreshTableAlertsFromCache() {
     final unreadTableIds = tableNotificationsByTableId.entries
         .where(
-          (entry) =>
-              entry.value.any((notification) => !notification.isRead),
+          (entry) => entry.value.any((notification) => !notification.isRead),
         )
         .map((entry) => entry.key)
         .toSet();
@@ -272,10 +310,10 @@ class TableController extends GetxController {
   int get totalTablesCount => tables.length;
 
   int get occupiedTablesCount =>
-      tables.where((t) => t.status == TableStatus.occupied).length;
+      tables.where((table) => table.status == TableStatus.occupied).length;
 
   int get emptyTablesCount =>
-      tables.where((t) => t.status == TableStatus.available).length;
+      tables.where((table) => table.status == TableStatus.available).length;
 
   int get occupiedPercentage {
     if (totalTablesCount == 0) return 0;

@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 import '../../../../../core/config/api_config.dart';
@@ -34,6 +35,8 @@ class KitchenService {
           status
           totalAmount
           paymentStatus
+          reservationTime
+          orderDate
           items {
             dishId
             dishName
