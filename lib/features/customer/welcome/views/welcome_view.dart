@@ -7,6 +7,7 @@ import '../../auth/register/views/register_view.dart';
 import '../../home/data/models/table_qr_payload.dart';
 import '../../home/views/table_qr_scan_view.dart';
 import '../../menu/views/menu_view.dart';
+import '../../notifications/controllers/customer_notification_controller.dart';
 import 'widgets/welcome_action_section.dart';
 import 'widgets/welcome_brand_header.dart';
 import 'widgets/welcome_footer.dart';
@@ -128,6 +129,7 @@ class WelcomeView extends StatelessWidget {
       tableId: payload.tableId,
       tableLabel: payload.tableLabel,
     );
+    CustomerNotificationController.refreshActiveSession();
 
     if (!context.mounted) {
       return;

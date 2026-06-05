@@ -13,6 +13,7 @@ import '../../../../core/widgets/app_back_icon_button.dart';
 import '../../../../core/widgets/app_cta_button.dart';
 import '../../../../core/widgets/app_labeled_auth_text_field.dart';
 import '../../../../core/widgets/app_surface_command_button.dart';
+import '../../feedback/views/customer_feedback_view.dart';
 import '../controllers/order_detail_controller.dart';
 import '../data/models/order_detail_model.dart';
 import '../data/models/order_item_model.dart';
@@ -283,9 +284,17 @@ class OrderPaymentView extends StatelessWidget {
     }
 
     if (controller.isPaid) {
+      final earnedPoints = await controller.handlePaymentConfirmed();
+      if (!context.mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thanh toán đã được xác nhận.')),
       );
+      await _openFeedback(context, earnedPoints);
+      if (!context.mounted) {
+        return;
+      }
       Navigator.pop(context, true);
       return;
     }
@@ -293,6 +302,18 @@ class OrderPaymentView extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Đơn hàng vẫn chưa được xác nhận thanh toán.'),
+      ),
+    );
+  }
+
+  Future<void> _openFeedback(BuildContext context, int earnedPoints) async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomerFeedbackView(
+          orderId: order.orderId,
+          earnedPoints: earnedPoints,
+        ),
       ),
     );
   }

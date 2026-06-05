@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -12,6 +14,8 @@ import '../../home/data/models/table_qr_payload.dart';
 import '../../home/views/home_view.dart';
 import '../../home/views/table_qr_scan_view.dart';
 import '../../menu/views/menu_view.dart';
+import '../../notifications/controllers/customer_notification_controller.dart';
+import '../../notifications/views/widgets/customer_notification_sheet.dart';
 import '../../order/views/order_history_view.dart';
 import '../../welcome/views/welcome_view.dart';
 import '../controllers/customer_settings_controller.dart';
@@ -30,6 +34,7 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final String _controllerTag;
   late final CustomerSettingsController _controller;
+  late final CustomerNotificationController _notificationController;
 
   @override
   void initState() {
@@ -41,6 +46,8 @@ class _SettingsViewState extends State<SettingsView> {
       ),
       tag: _controllerTag,
     );
+    _notificationController = CustomerNotificationController.ensureRegistered();
+    unawaited(_notificationController.refreshTableSession());
   }
 
   @override
@@ -60,7 +67,10 @@ class _SettingsViewState extends State<SettingsView> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               children: [
-                const SettingsHeader(),
+                SettingsHeader(
+                  unreadCount: _notificationController.unreadCount.value,
+                  onNotificationsTap: () => _showNotifications(context),
+                ),
                 const SizedBox(height: 18),
                 SettingsProfilePanel(
                   profile: _controller.profile.value,
@@ -326,6 +336,7 @@ class _SettingsViewState extends State<SettingsView> {
       tableId: payload.tableId,
       tableLabel: payload.tableLabel,
     );
+    CustomerNotificationController.refreshActiveSession();
     if (!context.mounted) {
       return;
     }
@@ -343,9 +354,24 @@ class _SettingsViewState extends State<SettingsView> {
 
   Future<void> _clearTable(BuildContext context) async {
     await _controller.clearTableSession();
+    CustomerNotificationController.refreshActiveSession();
     if (context.mounted) {
       _showMessage(context, 'Đã xóa bàn đang order.');
     }
+  }
+
+  Future<void> _showNotifications(BuildContext context) async {
+    _notificationController.markAllRead();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (_) =>
+          CustomerNotificationSheet(controller: _notificationController),
+    );
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

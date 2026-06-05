@@ -7,6 +7,7 @@ import '../../../../core/widgets/app_back_icon_button.dart';
 import '../../../../core/widgets/app_cta_button.dart';
 import '../../../../core/widgets/app_state_panel.dart';
 import '../../../../core/widgets/app_surface_command_button.dart';
+import '../../feedback/views/customer_feedback_view.dart';
 import '../../home/views/home_view.dart';
 import '../controllers/order_detail_controller.dart';
 import '../data/models/order_detail_model.dart';
@@ -94,6 +95,7 @@ class _OrderDetailViewState extends State<OrderDetailView> {
                   onRefresh: _controller.loadOrder,
                   onHome: () => _goHome(context),
                   onPrint: () => _exportReceipt(context),
+                  onEvaluate: () => _openFeedback(context, order),
                   onCancelItem: (item) => _cancelPendingItem(context, item),
                   canCancelItem: _controller.canCancelItem,
                 );
@@ -130,6 +132,26 @@ class _OrderDetailViewState extends State<OrderDetailView> {
     if (paid == true) {
       await _controller.loadOrder();
     }
+  }
+
+  Future<void> _openFeedback(
+    BuildContext context,
+    OrderDetailModel order,
+  ) async {
+    await _controller.refreshLoyaltyBalance();
+    if (!context.mounted) {
+      return;
+    }
+
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomerFeedbackView(
+          orderId: order.orderId,
+          earnedPoints: _controller.estimatedEarnedPointsFor(order),
+        ),
+      ),
+    );
   }
 
   Future<void> _cancelPendingItem(
@@ -242,6 +264,7 @@ class _OrderDetailContent extends StatelessWidget {
     required this.onRefresh,
     required this.onHome,
     required this.onPrint,
+    required this.onEvaluate,
     required this.onCancelItem,
     required this.canCancelItem,
   });
@@ -252,6 +275,7 @@ class _OrderDetailContent extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final VoidCallback onHome;
   final VoidCallback onPrint;
+  final VoidCallback onEvaluate;
   final ValueChanged<OrderItemModel> onCancelItem;
   final bool Function(OrderItemModel item) canCancelItem;
 
@@ -294,6 +318,7 @@ class _OrderDetailContent extends StatelessWidget {
             _PaidActions(
               onHome: onHome,
               onPrint: onPrint,
+              onEvaluate: onEvaluate,
               isExportingReceipt: isExportingReceipt,
             ),
         ],
@@ -344,17 +369,33 @@ class _PaidActions extends StatelessWidget {
   const _PaidActions({
     required this.onHome,
     required this.onPrint,
+    required this.onEvaluate,
     required this.isExportingReceipt,
   });
 
   final VoidCallback onHome;
   final VoidCallback onPrint;
+  final VoidCallback onEvaluate;
   final bool isExportingReceipt;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        AppCtaButton(
+          label: 'Đánh giá nhà hàng',
+          onPressed: onEvaluate,
+          backgroundColor: Colors.black,
+          borderRadius: 8,
+          fontSize: 15,
+          height: 56,
+          trailing: const Icon(
+            Icons.star_rounded,
+            color: Color(0xFFFFC43B),
+            size: 22,
+          ),
+        ),
+        const SizedBox(height: 12),
         AppCtaButton(
           label: 'Về trang chủ',
           onPressed: onHome,
