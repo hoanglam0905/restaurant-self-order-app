@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/config/api_config.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/widgets/app_cta_button.dart';
+import '../../../../core/widgets/app_labeled_auth_text_field.dart';
+import '../../../customer/order/data/models/loyalty_points_application_model.dart';
 import '../../../customer/order/data/models/order_detail_model.dart';
 import '../../../customer/order/data/models/order_item_model.dart';
 import '../../../customer/order/data/models/payment_process_result_model.dart';
@@ -552,6 +554,13 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
   }
 
   Future<void> _showPrintDialog(OrderDetailModel order) async {
+    if (order.paymentStatus.toUpperCase() != 'PAID') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chỉ có thể in hóa đơn đã thanh toán.')),
+      );
+      return;
+    }
+
     final allow = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -610,6 +619,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
 
   Future<void> _openOrderDetail(OrderDetailModel order) async {
     OrderDetailModel detailOrder = order;
+    int? customerPoints;
 
     try {
       detailOrder = await _historyOrderApiService.fetchOrderById(order.orderId);
@@ -625,12 +635,17 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
       );
     }
 
+    customerPoints = await _historyOrderApiService.fetchCustomerPointsByName(
+      detailOrder.customerName,
+    );
+
     if (!mounted) return;
 
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => _HistoryOrderDetailPage(
           order: detailOrder,
+          customerPoints: customerPoints,
           historyOrderApiService: _historyOrderApiService,
           orderReceiptService: _orderReceiptService,
         ),
@@ -689,7 +704,7 @@ query GetOrders {
 ''';
 
   static const String _orderDetailQuery = r'''
-query GetOrder($orderId: String!) {
+query GetOrder($orderId: ID!) {
   order(orderId: $orderId) {
     orderId
     customerName
@@ -773,6 +788,7 @@ query GetOrder($orderId: String!) {
   Future<PaymentProcessResultModel> processPayment({
     required OrderDetailModel order,
     required String paymentMethod,
+    int pointsToUse = 0,
   }) async {
     try {
       final response = await _apiClient.dio.post<dynamic>(
@@ -782,6 +798,7 @@ query GetOrder($orderId: String!) {
           'paymentMethod': paymentMethod,
           'amount': order.totalAmount,
           'confirmPayment': true,
+          'pointsToUse': pointsToUse,
         },
       );
 
@@ -796,7 +813,31 @@ query GetOrder($orderId: String!) {
     }
   }
 
-  Future<VNPayPaymentModel> createVNPayPayment(OrderDetailModel order) async {
+  Future<LoyaltyPointsApplicationModel> applyPoints({
+    required int orderId,
+    required int pointsToUse,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/payment/apply-points',
+        data: <String, dynamic>{'orderId': orderId, 'pointsToUse': pointsToUse},
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return LoyaltyPointsApplicationModel.fromJson(data);
+      }
+
+      throw Exception('Không thể áp dụng điểm thưởng.');
+    } on DioException catch (error) {
+      throw Exception(_paymentMessageFromDio(error));
+    }
+  }
+
+  Future<VNPayPaymentModel> createVNPayPayment(
+    OrderDetailModel order, {
+    int pointsToUse = 0,
+  }) async {
     try {
       final response = await _apiClient.dio.post<dynamic>(
         '/payment/vnpay',
@@ -805,6 +846,7 @@ query GetOrder($orderId: String!) {
           'orderInfo': 'Payment for Order: ${order.orderId}',
           'returnUrl': '${ApiConfig.baseUrl}/payment/vnpay_payment',
           'orderId': order.orderId,
+          'pointsToUse': pointsToUse,
         },
       );
 
@@ -820,6 +862,28 @@ query GetOrder($orderId: String!) {
       throw Exception('Không thể tạo thanh toán VNPay.');
     } on DioException catch (error) {
       throw Exception(_paymentMessageFromDio(error));
+    }
+  }
+
+  Future<int?> fetchCustomerPointsByName(String? customerName) async {
+    final normalizedName = _normalizeName(customerName);
+    if (normalizedName == null) return null;
+
+    try {
+      final response = await _apiClient.dio.get<dynamic>('/customers');
+      final data = response.data;
+      if (data is! List) return null;
+
+      final matches = data.whereType<Map>().where((customer) {
+        return _normalizeName(customer['fullname']?.toString()) ==
+            normalizedName;
+      }).toList();
+
+      if (matches.length != 1) return null;
+
+      return _toInt(matches.first['points']);
+    } on DioException {
+      return null;
     }
   }
 
@@ -842,6 +906,12 @@ query GetOrder($orderId: String!) {
                 .toList()
           : <Map<String, dynamic>>[],
     };
+  }
+
+  String? _normalizeName(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) return null;
+    return normalized;
   }
 
   Map<String, dynamic> _normalizeOrderItemJson(Map<dynamic, dynamic> raw) {
@@ -928,6 +998,7 @@ class _HistoryOrderCard extends StatelessWidget {
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:00';
     final orderCode = order.orderId.toString().padLeft(4, '0');
     final total = _calculateFinalTotal(order);
+    final isPaid = order.paymentStatus.toUpperCase() == 'PAID';
 
     return Container(
       decoration: BoxDecoration(
@@ -1017,8 +1088,10 @@ class _HistoryOrderCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _CirclePrintButton(onTap: onPrint),
-                const SizedBox(width: 10),
+                if (isPaid) ...[
+                  _CirclePrintButton(onTap: onPrint),
+                  const SizedBox(width: 10),
+                ],
                 _DetailButton(onTap: onViewDetail),
               ],
             ),
@@ -1366,11 +1439,13 @@ class _InlineErrorBanner extends StatelessWidget {
 class _HistoryOrderDetailPage extends StatefulWidget {
   const _HistoryOrderDetailPage({
     required this.order,
+    required this.customerPoints,
     required this.historyOrderApiService,
     required this.orderReceiptService,
   });
 
   final OrderDetailModel order;
+  final int? customerPoints;
   final _HistoryOrderApiService historyOrderApiService;
   final OrderReceiptService orderReceiptService;
 
@@ -1388,11 +1463,25 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
   bool _changed = false;
   String _paymentMessage = '';
   String _vnpayUrl = '';
+  late final TextEditingController _pointsController;
+  late final int? _customerPoints;
+  int _pointsToUse = 0;
+  double _appliedDiscount = 0;
 
   @override
   void initState() {
     super.initState();
     _order = widget.order;
+    _customerPoints = widget.customerPoints;
+    _pointsController = TextEditingController();
+    _pointsController.addListener(_handlePointsChanged);
+  }
+
+  @override
+  void dispose() {
+    _pointsController.removeListener(_handlePointsChanged);
+    _pointsController.dispose();
+    super.dispose();
   }
 
   bool get _isPaid => _order.paymentStatus.toUpperCase() == 'PAID';
@@ -1400,7 +1489,8 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
   @override
   Widget build(BuildContext context) {
     final subtotal = _calculateSubtotal(_order);
-    final total = _calculateFinalTotal(_order);
+    final discount = _discountPreviewFor(subtotal);
+    final total = _calculateFinalTotal(_order, discount: discount);
 
     return PopScope(
       canPop: false,
@@ -1444,7 +1534,11 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
                       );
                     }),
                     const SizedBox(height: 8),
-                    _buildSummary(subtotal: subtotal, total: total),
+                    _buildSummary(
+                      subtotal: subtotal,
+                      discount: discount,
+                      total: total,
+                    ),
                     if (!_isPaid) ...[
                       const SizedBox(height: 16),
                       _buildPaymentPanel(),
@@ -1470,21 +1564,23 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
                         size: 22,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    AppCtaButton(
-                      label: 'In PDF',
-                      onPressed: _showPrintDialog,
-                      backgroundColor: const Color(0xFFD0D4DD),
-                      foregroundColor: _primary,
-                      height: 52,
-                      borderRadius: 12,
-                      fontSize: 16,
-                      trailing: const Icon(
-                        Icons.receipt_long_rounded,
-                        color: _primary,
-                        size: 18,
+                    if (_isPaid) ...[
+                      const SizedBox(height: 10),
+                      AppCtaButton(
+                        label: 'In PDF',
+                        onPressed: _showPrintDialog,
+                        backgroundColor: const Color(0xFFD0D4DD),
+                        foregroundColor: _primary,
+                        height: 52,
+                        borderRadius: 12,
+                        fontSize: 16,
+                        trailing: const Icon(
+                          Icons.receipt_long_rounded,
+                          color: _primary,
+                          size: 18,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1551,7 +1647,11 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
     );
   }
 
-  Widget _buildSummary({required double subtotal, required double total}) {
+  Widget _buildSummary({
+    required double subtotal,
+    required double discount,
+    required double total,
+  }) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
@@ -1601,6 +1701,13 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
           const Divider(color: Color(0xFFE8E4E2), height: 1),
           const SizedBox(height: 10),
           _SummaryRow(label: 'Tạm tính', value: _formatCurrency(subtotal)),
+          if (discount > 0) ...[
+            const SizedBox(height: 8),
+            _SummaryRow(
+              label: 'Giảm điểm',
+              value: '-${_formatCurrency(discount)}',
+            ),
+          ],
           const SizedBox(height: 10),
           const _DashedLine(color: Color(0xFFE9D3CC)),
           const SizedBox(height: 10),
@@ -1657,6 +1764,32 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
             ],
           ),
           const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.stars_rounded, color: _primary, size: 18),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'Điểm hiện có: ${_customerPoints?.toString() ?? 'Chưa xác định'}',
+                  style: const TextStyle(
+                    color: Color(0xFF5C321E),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (_pointsToUse > 0)
+                Text(
+                  'Dùng $_pointsToUse',
+                  style: const TextStyle(
+                    color: Color(0xFFAA3B20),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
@@ -1687,6 +1820,19 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
                         });
                       },
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppLabeledAuthTextField(
+            label: 'Sử dụng điểm',
+            controller: _pointsController,
+            hintText: 'Nhập số điểm',
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            prefixIcon: const Icon(
+              Icons.redeem_rounded,
+              color: _primary,
+              size: 18,
             ),
           ),
           const SizedBox(height: 12),
@@ -1740,6 +1886,8 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
       return;
     }
 
+    if (!_validatePointsToUse()) return;
+
     setState(() {
       _isProcessingPayment = true;
       _paymentMessage = '';
@@ -1749,6 +1897,7 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
       final result = await widget.historyOrderApiService.processPayment(
         order: _order,
         paymentMethod: _paymentMethod.apiValue,
+        pointsToUse: _pointsToUse,
       );
       final latest = await widget.historyOrderApiService.fetchOrderById(
         _order.orderId,
@@ -1776,6 +1925,8 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
   }
 
   Future<void> _createVNPayPayment() async {
+    if (!_validatePointsToUse()) return;
+
     setState(() {
       _isProcessingPayment = true;
       _paymentMessage = '';
@@ -1783,8 +1934,21 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
     });
 
     try {
+      if (_pointsToUse > 0) {
+        final pointsResult = await widget.historyOrderApiService.applyPoints(
+          orderId: _order.orderId,
+          pointsToUse: _pointsToUse,
+        );
+        if (!mounted) return;
+
+        setState(() {
+          _appliedDiscount = pointsResult.discount;
+        });
+      }
+
       final payment = await widget.historyOrderApiService.createVNPayPayment(
         _order,
+        pointsToUse: _pointsToUse,
       );
       if (!mounted) return;
 
@@ -1857,6 +2021,13 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
   }
 
   Future<void> _showPrintDialog() async {
+    if (!_isPaid) {
+      setState(() {
+        _paymentMessage = 'Chỉ có thể in hóa đơn đã thanh toán.';
+      });
+      return;
+    }
+
     final allow = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -1911,6 +2082,44 @@ class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
         const SnackBar(content: Text('Không thể xuất hóa đơn PDF.')),
       );
     }
+  }
+
+  void _handlePointsChanged() {
+    final points = int.tryParse(_pointsController.text.trim()) ?? 0;
+    final normalizedPoints = points > 0 ? points : 0;
+    if (normalizedPoints == _pointsToUse) return;
+
+    setState(() {
+      _pointsToUse = normalizedPoints;
+      _appliedDiscount = normalizedPoints.toDouble();
+      _vnpayUrl = '';
+      _paymentMessage =
+          _customerPoints != null && normalizedPoints > _customerPoints
+          ? 'Lỗi: Khách hàng chỉ có $_customerPoints điểm.'
+          : '';
+    });
+  }
+
+  double _discountPreviewFor(double subtotal) {
+    if (_appliedDiscount <= 0) return 0;
+    final availableDiscount =
+        _customerPoints != null && _appliedDiscount > _customerPoints
+        ? _customerPoints.toDouble()
+        : _appliedDiscount;
+    return availableDiscount > subtotal ? subtotal : availableDiscount;
+  }
+
+  bool _validatePointsToUse() {
+    if (_pointsToUse <= 0) return true;
+
+    if (_customerPoints != null && _pointsToUse > _customerPoints) {
+      setState(() {
+        _paymentMessage = 'Lỗi: Khách hàng chỉ có $_customerPoints điểm.';
+      });
+      return false;
+    }
+
+    return true;
   }
 }
 
@@ -2112,8 +2321,9 @@ double _calculateSubtotal(OrderDetailModel order) {
   return order.items.fold<double>(0, (sum, item) => sum + item.subtotal);
 }
 
-double _calculateFinalTotal(OrderDetailModel order) {
-  return _calculateSubtotal(order);
+double _calculateFinalTotal(OrderDetailModel order, {double discount = 0}) {
+  final total = _calculateSubtotal(order) - discount;
+  return total < 0 ? 0 : total;
 }
 
 String _formatCurrency(double amount) {

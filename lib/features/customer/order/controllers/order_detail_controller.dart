@@ -56,6 +56,7 @@ class OrderDetailController extends GetxController {
   final RxString receiptMessage = ''.obs;
   final RxString loyaltyMessage = ''.obs;
   final RxString vnpayPaymentUrl = ''.obs;
+  final RxInt earnedPoints = 0.obs;
   final Rx<CustomerPaymentMethod> selectedPaymentMethod =
       CustomerPaymentMethod.online.obs;
   final Rxn<OrderDetailModel> order = Rxn<OrderDetailModel>();
@@ -68,7 +69,7 @@ class OrderDetailController extends GetxController {
     _realtimeSubscription = _webSocketService.events.listen(
       _handleRealtimeEvent,
     );
-    _loadLoyaltyBalance();
+    refreshLoyaltyBalance();
     loadOrder();
   }
 
@@ -116,6 +117,9 @@ class OrderDetailController extends GetxController {
         pointsToUse: appliedPointsToUse.value,
       );
       paymentMessage.value = result.message;
+      if (result.success && result.paymentStatus?.toUpperCase() == 'PAID') {
+        await handlePaymentConfirmed();
+      }
       await loadOrder();
       return result.success;
     } on OrderDetailException catch (error) {
@@ -316,7 +320,7 @@ class OrderDetailController extends GetxController {
 
   double payableAmountFor(OrderDetailModel order) => _payableAmountFor(order);
 
-  Future<void> _loadLoyaltyBalance() async {
+  Future<void> refreshLoyaltyBalance() async {
     try {
       final session = await _authSessionStorage.readCustomerSession();
       if (session == null) {
@@ -329,6 +333,22 @@ class OrderDetailController extends GetxController {
     } catch (_) {
       availablePoints.value = 0;
     }
+  }
+
+  Future<int> handlePaymentConfirmed() async {
+    final currentOrder = order.value;
+    if (currentOrder != null) {
+      earnedPoints.value = estimatedEarnedPointsFor(currentOrder);
+    }
+    await refreshLoyaltyBalance();
+    return earnedPoints.value;
+  }
+
+  int estimatedEarnedPointsFor(OrderDetailModel order) {
+    final payable = payableAmount.value > 0
+        ? payableAmount.value
+        : _payableAmountFor(order);
+    return (payable ~/ 100000) * 1000;
   }
 
   double _payableAmountFor(OrderDetailModel order) {
@@ -359,11 +379,16 @@ class OrderDetailController extends GetxController {
     }
 
     if (event.type == CustomerOrderWebSocketEventType.orderStatusUpdated ||
-        event.type == CustomerOrderWebSocketEventType.newOrder) {
+        event.type == CustomerOrderWebSocketEventType.newOrder ||
+        event.type == CustomerOrderWebSocketEventType.paymentStatusUpdated ||
+        event.type == CustomerOrderWebSocketEventType.paymentStatusReset) {
       order.value = currentOrder.copyWith(
         status: event.orderStatus,
         paymentStatus: event.paymentStatus,
       );
+      if (event.paymentStatus?.toUpperCase() == 'PAID') {
+        unawaited(handlePaymentConfirmed());
+      }
       unawaited(loadOrder(showLoading: false));
       return;
     }

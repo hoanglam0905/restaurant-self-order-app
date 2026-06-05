@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../core/storage/table_session_storage.dart';
 import '../core/theme/app_theme.dart';
 import '../features/customer/home/data/models/table_qr_payload.dart';
 import '../features/customer/menu/views/menu_view.dart';
+import '../features/customer/notifications/controllers/customer_notification_controller.dart';
+import '../features/customer/notifications/views/widgets/customer_notification_host.dart';
 import '../features/customer/welcome/views/welcome_view.dart';
 
 class RestaurantApp extends StatefulWidget {
@@ -26,6 +29,7 @@ class _RestaurantAppState extends State<RestaurantApp> {
   @override
   void initState() {
     super.initState();
+    CustomerNotificationController.ensureRegistered();
     _appLinks = AppLinks();
     _listenForTableLinks();
   }
@@ -33,6 +37,9 @@ class _RestaurantAppState extends State<RestaurantApp> {
   @override
   void dispose() {
     _linkSubscription?.cancel();
+    if (Get.isRegistered<CustomerNotificationController>()) {
+      Get.delete<CustomerNotificationController>(force: true);
+    }
     super.dispose();
   }
 
@@ -43,6 +50,8 @@ class _RestaurantAppState extends State<RestaurantApp> {
       debugShowCheckedModeBanner: false,
       title: 'Bon Appetit',
       theme: AppTheme.light,
+      builder: (context, child) =>
+          CustomerNotificationHost(child: child ?? const SizedBox.shrink()),
       home: const WelcomeView(),
     );
   }
@@ -75,6 +84,7 @@ class _RestaurantAppState extends State<RestaurantApp> {
       tableId: payload.tableId,
       tableLabel: payload.tableLabel,
     );
+    CustomerNotificationController.refreshActiveSession();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final navigator = _navigatorKey.currentState;

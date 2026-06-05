@@ -73,9 +73,9 @@ class _TableQrScanViewState extends State<TableQrScanView> {
                     const SizedBox(height: 10),
                   ],
                   AppCtaButton(
-                    label: 'Demo ban A6',
+                    label: 'Demo ban A10',
                     onPressed: () => _completeScan(
-                      const TableQrPayload(tableId: 6, tableLabel: 'A6'),
+                      const TableQrPayload(tableId: 10, tableLabel: 'A10'),
                     ),
                     backgroundColor: AppColors.welcomeAccent,
                     height: 48,

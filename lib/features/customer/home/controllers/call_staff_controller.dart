@@ -4,6 +4,7 @@ import '../../../../../core/storage/auth_session_storage.dart';
 import '../../../../../core/storage/table_session_storage.dart';
 import '../../order/data/models/order_detail_model.dart';
 import '../../order/data/services/order_history_service.dart';
+import '../../notifications/controllers/customer_notification_controller.dart';
 import '../data/models/call_staff_request_model.dart';
 import '../data/services/call_staff_order_lookup_service.dart';
 import '../data/services/home_notification_service.dart';
@@ -55,6 +56,7 @@ class CallStaffController extends GetxController {
           tableId: order.tableNumber,
           tableLabel: order.tableNumber.toString(),
         );
+        CustomerNotificationController.refreshActiveSession();
 
         return CallStaffTarget(
           tableNumber: order.tableNumber,
@@ -75,6 +77,7 @@ class CallStaffController extends GetxController {
         tableId: unpaidOrder.tableNumber,
         tableLabel: unpaidOrder.tableNumber.toString(),
       );
+      CustomerNotificationController.refreshActiveSession();
 
       return CallStaffTarget(
         tableNumber: unpaidOrder.tableNumber,

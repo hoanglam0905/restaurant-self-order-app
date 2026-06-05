@@ -8,6 +8,7 @@ import '../../../../core/widgets/app_cta_button.dart';
 import '../../../../core/widgets/app_customer_bottom_nav_bar.dart';
 import '../../../../core/widgets/app_inline_text_link.dart';
 import '../../menu/views/menu_view.dart';
+import '../../notifications/controllers/customer_notification_controller.dart';
 import '../../order/data/services/order_history_service.dart';
 import '../../order/views/order_history_view.dart';
 import '../../settings/views/settings_view.dart';
@@ -213,6 +214,7 @@ class _HomeViewState extends State<HomeView> {
       tableId: payload.tableId,
       tableLabel: payload.tableLabel,
     );
+    CustomerNotificationController.refreshActiveSession();
 
     if (!context.mounted) {
       return;

@@ -49,9 +49,9 @@ class DishModel {
       return null;
     }
 
-    if (value.startsWith('http://localhost:8080')) {
+    if (value.startsWith('https://selforderingrestaurant-635x.onrender.com')) {
       return value.replaceFirst(
-        'http://localhost:8080',
+        'https://selforderingrestaurant-635x.onrender.com',
         ApiConfig.backendOrigin,
       );
     }

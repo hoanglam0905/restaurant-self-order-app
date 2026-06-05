@@ -2,6 +2,8 @@ enum CustomerOrderWebSocketEventType {
   newOrder,
   orderStatusUpdated,
   orderItemStatusUpdated,
+  paymentStatusUpdated,
+  paymentStatusReset,
   unknown,
 }
 
@@ -35,7 +37,9 @@ class CustomerOrderWebSocketEvent {
   bool get isOrderUpdate =>
       type == CustomerOrderWebSocketEventType.newOrder ||
       type == CustomerOrderWebSocketEventType.orderStatusUpdated ||
-      type == CustomerOrderWebSocketEventType.orderItemStatusUpdated;
+      type == CustomerOrderWebSocketEventType.orderItemStatusUpdated ||
+      type == CustomerOrderWebSocketEventType.paymentStatusUpdated ||
+      type == CustomerOrderWebSocketEventType.paymentStatusReset;
 
   factory CustomerOrderWebSocketEvent.fromJson(Map<String, dynamic> json) {
     final typeValue = json['type']?.toString();
@@ -49,6 +53,14 @@ class CustomerOrderWebSocketEvent {
         json['order'],
       ),
       'ORDER_ITEM_STATUS_UPDATED' => _fromItemPayload(json['item']),
+      'PAYMENT_STATUS_UPDATED' => _fromPaymentPayload(
+        CustomerOrderWebSocketEventType.paymentStatusUpdated,
+        json,
+      ),
+      'PAYMENT_STATUS_RESET' => _fromPaymentPayload(
+        CustomerOrderWebSocketEventType.paymentStatusReset,
+        json,
+      ),
       _ => const CustomerOrderWebSocketEvent(
         type: CustomerOrderWebSocketEventType.unknown,
       ),
@@ -85,6 +97,18 @@ class CustomerOrderWebSocketEvent {
       quantity: _intValue(item['quantity']),
       notes: item['notes']?.toString(),
       price: (item['price'] as num?)?.toDouble(),
+    );
+  }
+
+  static CustomerOrderWebSocketEvent _fromPaymentPayload(
+    CustomerOrderWebSocketEventType type,
+    Map<String, dynamic> payload,
+  ) {
+    return CustomerOrderWebSocketEvent(
+      type: type,
+      orderId: _intValue(payload['orderId']),
+      tableNumber: _intValue(payload['tableNumber']),
+      paymentStatus: payload['paymentStatus']?.toString(),
     );
   }
 
