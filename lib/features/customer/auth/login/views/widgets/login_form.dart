@@ -48,18 +48,22 @@ class LoginForm extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Obx(
-              () => AppCheckboxLabel(
-                value: controller.rememberMe.value,
-                label: 'Ghi nhớ tôi',
-                onChanged: controller.toggleRememberMe,
+            Flexible(
+              child: Obx(
+                () => AppCheckboxLabel(
+                  value: controller.rememberMe.value,
+                  label: 'Ghi nhớ tôi',
+                  onChanged: controller.toggleRememberMe,
+                ),
               ),
             ),
-            AppInlineTextLink(
-              label: 'Quên mật khẩu?',
-              onTap: onForgotPassword,
-              textColor: const Color(0xFFA73413),
-              fontSize: 12,
+            Flexible(
+              child: AppInlineTextLink(
+                label: 'Quên mật khẩu?',
+                onTap: onForgotPassword,
+                textColor: const Color(0xFFA73413),
+                fontSize: 12,
+              ),
             ),
           ],
         ),

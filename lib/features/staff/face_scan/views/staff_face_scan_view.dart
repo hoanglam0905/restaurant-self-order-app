@@ -1,8 +1,9 @@
-﻿import 'dart:async';
-
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../staff_navigation_shell.dart';
+import '../controllers/staff_face_scan_controller.dart';
 
 class StaffFaceScanView extends StatefulWidget {
   const StaffFaceScanView({super.key});
@@ -13,48 +14,41 @@ class StaffFaceScanView extends StatefulWidget {
 
 class _StaffFaceScanViewState extends State<StaffFaceScanView>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _scanController;
-  late final Animation<double> _scanAnimation;
+  late final StaffFaceScanController controller;
 
-  bool _isScanning = false;
-  bool _isVerified = false;
+  // Animation cho việc quét mặt (nếu vẫn muốn giữ lại hiệu ứng quét)
+  late final AnimationController _scanAnimationController;
+  late final Animation<double> _scanAnimation;
 
   @override
   void initState() {
     super.initState();
-    _scanController = AnimationController(
+    controller = Get.put(StaffFaceScanController());
+
+    _scanAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
     _scanAnimation = CurvedAnimation(
-      parent: _scanController,
+      parent: _scanAnimationController,
       curve: Curves.easeInOutCubic,
     );
+
+    // Lắng nghe trạng thái quét để chạy animation
+    ever(controller.isScanning, (isScanning) {
+      if (isScanning) {
+        _scanAnimationController.repeat(reverse: true);
+      } else {
+        _scanAnimationController.stop();
+      }
+    });
   }
 
   @override
   void dispose() {
-    _scanController.dispose();
+    _scanAnimationController.dispose();
+    Get.delete<StaffFaceScanController>();
     super.dispose();
-  }
-
-  Future<void> _startScan() async {
-    if (_isScanning) return;
-
-    setState(() {
-      _isScanning = true;
-      _isVerified = false;
-    });
-    _scanController.repeat(reverse: true);
-
-    await Future<void>.delayed(const Duration(milliseconds: 2200));
-    if (!mounted) return;
-
-    _scanController.stop();
-    setState(() {
-      _isScanning = false;
-      _isVerified = true;
-    });
   }
 
   void _enterStaffWorkspace() {
@@ -93,17 +87,17 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                 Positioned(
                   top: -90,
                   right: -80,
-                  child: _GlowOrb(
+                  child: const _GlowOrb(
                     size: 220,
-                    color: const Color(0xFFFFC2A8).withValues(alpha: 0.55),
+                    color: Color(0x8CFFC2A8), // 0.55 opacity
                   ),
                 ),
                 Positioned(
                   bottom: 80,
                   left: -100,
-                  child: _GlowOrb(
+                  child: const _GlowOrb(
                     size: 220,
-                    color: const Color(0xFFB8D8FF).withValues(alpha: 0.45),
+                    color: Color(0x73B8D8FF), // 0.45 opacity
                   ),
                 ),
                 Positioned(
@@ -113,36 +107,61 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                   child: Container(
                     height: 138,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF18212E).withValues(alpha: 0.06),
+                      color: const Color(0x0F18212E), // 0.06 opacity
                       borderRadius: BorderRadius.circular(38),
                     ),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
-                  child: Column(
-                    children: [
-                      _buildHeader(),
-                      const SizedBox(height: 18),
-                      _buildStatusCard(),
-                      const SizedBox(height: 18),
-                      Expanded(child: Center(child: _buildFaceScanner())),
-                      const SizedBox(height: 18),
-                      _buildChecklist(),
-                      const SizedBox(height: 16),
-                      _buildPrimaryButton(),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Giao diện mô phỏng, chưa kết nối camera/API nhận diện.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: const Color(0xFF718096).withValues(alpha: 0.85),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                  child: Obx(() {
+                    return Column(
+                      children: [
+                        _buildHeader(),
+                        const SizedBox(height: 18),
+                        _buildStatusCard(),
+                        const SizedBox(height: 18),
+                        Expanded(child: Center(child: _buildFaceScanner())),
+                        if (controller.errorMessage.value.isNotEmpty)
+                          Flexible(
+                            child: SingleChildScrollView(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  controller.errorMessage.value,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 18),
+                        _buildChecklist(),
+                        const SizedBox(height: 16),
+                        _buildPrimaryButton(),
+                        const SizedBox(height: 10),
+                        GestureDetector(
+                          onTap: controller.toggleAction,
+                          child: Text(
+                            controller.isCheckOut.value
+                                ? 'Đang ở chế độ Check-Out. Nhấn để đổi sang Check-In'
+                                : 'Đang ở chế độ Check-In. Nhấn để đổi sang Check-Out',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xD9718096), // 0.85 opacity
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    );
+                  }),
                 ),
               ],
             ),
@@ -167,7 +186,7 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFB63A1B).withValues(alpha: 0.24),
+                color: const Color(0x3DB63A1B), // 0.24 opacity
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -180,22 +199,24 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
           ),
         ),
         const SizedBox(width: 12),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Xác thực nhân viên',
-                style: TextStyle(
+                controller.isCheckOut.value ? 'Xác thực Tan Ca' : 'Xác thực Vào Ca',
+                style: const TextStyle(
                   color: Color(0xFF1F2937),
                   fontSize: 19,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              SizedBox(height: 3),
+              const SizedBox(height: 3),
               Text(
-                'Quét khuôn mặt trước khi vào ca',
-                style: TextStyle(
+                controller.isCheckOut.value
+                    ? 'Quét khuôn mặt trước khi về'
+                    : 'Quét khuôn mặt trước khi vào ca',
+                style: const TextStyle(
                   color: Color(0xFF718096),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -207,7 +228,7 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.82),
+            color: const Color(0xD1FFFFFF), // 0.82 opacity
             borderRadius: BorderRadius.circular(99),
             border: Border.all(color: Colors.white),
           ),
@@ -226,27 +247,28 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
   }
 
   Widget _buildStatusCard() {
-    final title = _isVerified
+    final title = controller.isVerified.value
         ? 'Đã xác thực'
-        : _isScanning
-            ? 'Đang quét khuôn mặt'
+        : controller.isScanning.value
+            ? 'Đang nhận diện'
             : 'Sẵn sàng xác thực';
-    final subtitle = _isVerified
-        ? 'Danh tính nhân viên đã được xác nhận.'
-        : _isScanning
-            ? 'Giữ khuôn mặt trong khung và nhìn thẳng.'
-            : 'Nhấn bắt đầu để mô phỏng bước quét mặt.';
+
+    final subtitle = controller.isVerified.value
+        ? controller.scanResult?.message ?? 'Xác thực thành công.'
+        : controller.isScanning.value
+            ? 'Đang gửi ảnh lên server kiểm tra...'
+            : 'Nhấn bắt đầu và nhìn thẳng vào camera.';
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.76),
+        color: const Color(0xC2FFFFFF), // 0.76 opacity
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white, width: 1.4),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF253248).withValues(alpha: 0.07),
+            color: const Color(0x12253248), // 0.07 opacity
             blurRadius: 28,
             offset: const Offset(0, 16),
           ),
@@ -261,15 +283,17 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: _isVerified
+                colors: controller.isVerified.value
                     ? const [Color(0xFFDAFBE6), Color(0xFF6BD18A)]
                     : const [Color(0xFFFFE4D8), Color(0xFFFFB088)],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              _isVerified ? Icons.check_rounded : Icons.face_retouching_natural,
-              color: _isVerified
+              controller.isVerified.value
+                  ? Icons.check_rounded
+                  : Icons.face_retouching_natural,
+              color: controller.isVerified.value
                   ? const Color(0xFF116B32)
                   : const Color(0xFFB63A1B),
               size: 24,
@@ -302,14 +326,14 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                 ClipRRect(
                   borderRadius: BorderRadius.circular(99),
                   child: LinearProgressIndicator(
-                    value: _isVerified
+                    value: controller.isVerified.value
                         ? 1
-                        : _isScanning
+                        : controller.isScanning.value
                             ? null
                             : 0.18,
                     minHeight: 5,
                     backgroundColor: const Color(0xFFE6EBF2),
-                    color: _isVerified
+                    color: controller.isVerified.value
                         ? const Color(0xFF31A354)
                         : const Color(0xFFB63A1B),
                   ),
@@ -323,9 +347,9 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
   }
 
   Widget _buildFaceScanner() {
-    final statusLabel = _isVerified
+    final statusLabel = controller.isVerified.value
         ? 'VERIFIED'
-        : _isScanning
+        : controller.isScanning.value
             ? 'SCANNING'
             : 'READY';
 
@@ -335,12 +359,12 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
       height: 384,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
+        color: const Color(0xB8FFFFFF), // 0.72 opacity
         borderRadius: BorderRadius.circular(36),
         border: Border.all(color: Colors.white, width: 1.6),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.14),
+            color: const Color(0x241E293B), // 0.14 opacity
             blurRadius: 34,
             offset: const Offset(0, 22),
           ),
@@ -362,8 +386,8 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
             Positioned.fill(
               child: CustomPaint(
                 painter: _FaceScanFramePainter(
-                  isScanning: _isScanning,
-                  isVerified: _isVerified,
+                  isScanning: controller.isScanning.value,
+                  isVerified: controller.isVerified.value,
                 ),
               ),
             ),
@@ -375,14 +399,14 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                 children: [
                   _ScannerBadge(
                     label: 'LIVE PREVIEW',
-                    color: _isScanning
+                    color: controller.isScanning.value
                         ? const Color(0xFFFF8A5B)
                         : const Color(0xFF94A3B8),
                   ),
                   const Spacer(),
                   _ScannerBadge(
                     label: statusLabel,
-                    color: _isVerified
+                    color: controller.isVerified.value
                         ? const Color(0xFF4ADE80)
                         : const Color(0xFFFFC1A6),
                   ),
@@ -392,18 +416,19 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
             Container(
               width: 214,
               height: 254,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: const Color(0x0DFFFFFF), // 0.05 opacity
                 borderRadius: BorderRadius.circular(92),
                 border: Border.all(
-                  color: _isVerified
+                  color: controller.isVerified.value
                       ? const Color(0xFF4ADE80)
-                      : const Color(0xFFFFC1A6).withValues(alpha: 0.68),
+                      : const Color(0xADFFC1A6), // 0.68 opacity
                   width: 1.6,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: (_isVerified
+                    color: (controller.isVerified.value
                             ? const Color(0xFF4ADE80)
                             : const Color(0xFFFF7A45))
                         .withValues(alpha: 0.18),
@@ -414,31 +439,30 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
               ),
               child: Stack(
                 alignment: Alignment.center,
+                fit: StackFit.expand,
                 children: [
-                  Container(
-                    width: 138,
-                    height: 138,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          const Color(0xFFFFD2C2).withValues(alpha: 0.95),
-                          const Color(0xFFB63A1B).withValues(alpha: 0.18),
-                          Colors.transparent,
-                        ],
+                  if (controller.isCameraInitialized.value &&
+                      controller.cameraController != null)
+                    FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: controller.cameraController!.value.previewSize?.height ?? 1,
+                        height: controller.cameraController!.value.previewSize?.width ?? 1,
+                        child: CameraPreview(controller.cameraController!),
+                      ),
+                    )
+                  else
+                    const Center(
+                      child: Icon(
+                        Icons.face_retouching_natural,
+                        size: 80,
+                        color: Color(0xFFFFE1D5),
                       ),
                     ),
-                  ),
-                  const Icon(
-                    Icons.face_retouching_natural,
-                    size: 128,
-                    color: Color(0xFFFFE1D5),
-                  ),
-                  ..._buildFaceDots(),
-                  if (_isVerified)
+                  if (controller.isVerified.value)
                     Positioned(
-                      right: 30,
-                      bottom: 42,
+                      right: 16,
+                      bottom: 24,
                       child: Container(
                         width: 38,
                         height: 38,
@@ -457,7 +481,7 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                 ],
               ),
             ),
-            if (_isScanning)
+            if (controller.isScanning.value)
               Positioned.fill(
                 child: AnimatedBuilder(
                   animation: _scanAnimation,
@@ -486,7 +510,7 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                       borderRadius: BorderRadius.circular(99),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF7A45).withValues(alpha: 0.68),
+                          color: const Color(0xADFF7A45), // 0.68 opacity
                           blurRadius: 24,
                           spreadRadius: 4,
                         ),
@@ -503,19 +527,19 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
                 children: [
                   Expanded(
                     child: _buildScannerMetric(
-                      label: 'Ánh sáng',
-                      value: _isScanning || _isVerified ? 'Ổn' : '--',
+                      label: 'API Status',
+                      value: controller.isVerified.value
+                          ? 'OK'
+                          : controller.isScanning.value
+                              ? 'WAIT'
+                              : '--',
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _buildScannerMetric(
-                      label: 'Khớp mặt',
-                      value: _isVerified
-                          ? '99%'
-                          : _isScanning
-                              ? '...'
-                              : '--',
+                      label: 'Camera',
+                      value: controller.isCameraInitialized.value ? 'ON' : 'OFF',
                     ),
                   ),
                 ],
@@ -527,52 +551,14 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
     );
   }
 
-  List<Widget> _buildFaceDots() {
-    final dotColor = _isVerified
-        ? const Color(0xFF4ADE80)
-        : _isScanning
-            ? const Color(0xFFFFB088)
-            : const Color(0xFF94A3B8);
-
-    const positions = [
-      Offset(72, 82),
-      Offset(140, 82),
-      Offset(106, 114),
-      Offset(83, 144),
-      Offset(129, 144),
-    ];
-
-    return positions.map((offset) {
-      return Positioned(
-        left: offset.dx,
-        top: offset.dy,
-        child: Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            color: dotColor,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: dotColor.withValues(alpha: 0.55),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-        ),
-      );
-    }).toList();
-  }
-
   Widget _buildScannerMetric({required String label, required String value}) {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: const Color(0x14FFFFFF), // 0.08 opacity
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        border: Border.all(color: const Color(0x1EFFFFFF)), // 0.12 opacity
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -607,23 +593,23 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
           child: _CheckItem(
             icon: Icons.light_mode_outlined,
             label: 'Đủ sáng',
-            active: _isScanning || _isVerified,
+            active: controller.isScanning.value || controller.isVerified.value,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: _CheckItem(
             icon: Icons.center_focus_strong,
-            label: 'Đúng khung',
-            active: _isScanning || _isVerified,
+            label: 'Camera Sẵn Sàng',
+            active: controller.isCameraInitialized.value,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: _CheckItem(
             icon: Icons.badge_outlined,
-            label: 'Nhân viên',
-            active: _isVerified,
+            label: 'Thành công',
+            active: controller.isVerified.value,
           ),
         ),
       ],
@@ -631,10 +617,10 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
   }
 
   Widget _buildPrimaryButton() {
-    final label = _isVerified
+    final label = controller.isVerified.value
         ? 'Vào màn nhân viên'
-        : _isScanning
-            ? 'Đang quét...'
+        : controller.isScanning.value
+            ? 'Đang xử lý...'
             : 'Bắt đầu quét mặt';
 
     return SizedBox(
@@ -645,14 +631,14 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
           gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            colors: _isVerified
+            colors: controller.isVerified.value
                 ? const [Color(0xFF138A3D), Color(0xFF31A354)]
                 : const [Color(0xFF9F2F12), Color(0xFFD9542D)],
           ),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFB63A1B).withValues(alpha: 0.28),
+              color: const Color(0x47B63A1B), // 0.28 opacity
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -663,16 +649,18 @@ class _StaffFaceScanViewState extends State<StaffFaceScanView>
           borderRadius: BorderRadius.circular(18),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: _isScanning
+            onTap: controller.isScanning.value
                 ? null
-                : _isVerified
+                : controller.isVerified.value
                     ? _enterStaffWorkspace
-                    : _startScan,
+                    : controller.startScan,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  _isVerified ? Icons.login : Icons.face_retouching_natural,
+                  controller.isVerified.value
+                      ? Icons.login
+                      : Icons.face_retouching_natural,
                   color: Colors.white,
                   size: 18,
                 ),
@@ -706,9 +694,9 @@ class _ScannerBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: const Color(0x14FFFFFF), // 0.08 opacity
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+        border: Border.all(color: const Color(0x21FFFFFF)), // 0.13 opacity
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -761,7 +749,7 @@ class _CheckItem extends StatelessWidget {
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 9),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: active ? 0.9 : 0.68),
+        color: Color(0xFFFFFFFF).withValues(alpha: active ? 0.9 : 0.68),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: active ? const Color(0xFFFFB391) : Colors.white,
@@ -781,9 +769,7 @@ class _CheckItem extends StatelessWidget {
             width: 26,
             height: 26,
             decoration: BoxDecoration(
-              color: active
-                  ? const Color(0xFFFFE3D7)
-                  : const Color(0xFFE8EEF5),
+              color: active ? const Color(0xFFFFE3D7) : const Color(0xFFE8EEF5),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(
@@ -910,4 +896,3 @@ class _FaceScanFramePainter extends CustomPainter {
         oldDelegate.isVerified != isVerified;
   }
 }
-
