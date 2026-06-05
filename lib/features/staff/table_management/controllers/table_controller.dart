@@ -4,6 +4,7 @@ import '../data/models/staff_table_model.dart';
 import '../data/models/table_notification_model.dart';
 import '../data/models/table_status.dart';
 import '../data/services/table_service.dart';
+import '../data/models/table_order_model.dart';
 
 class TableController extends GetxController {
   TableController({required TableService tableService})
@@ -213,6 +214,20 @@ class TableController extends GetxController {
       isActionLoading.value = false;
     }
   }
+
+Future<TableOrderModel?> getActiveOrderByTable(int tableId) async {
+  isActionLoading.value = true;
+  errorMessage.value = '';
+
+  try {
+    return await _tableService.getActiveOrderByTable(tableId);
+  } catch (e) {
+    errorMessage.value = e.toString();
+    return null;
+  } finally {
+    isActionLoading.value = false;
+  }
+}
 
   void _cacheNotificationsByTable(
     List<TableNotificationModel> notifications,
