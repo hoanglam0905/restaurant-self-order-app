@@ -1,10 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/config/api_config.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/widgets/app_cta_button.dart';
 import '../../../customer/order/data/models/order_detail_model.dart';
 import '../../../customer/order/data/models/order_item_model.dart';
+import '../../../customer/order/data/models/payment_process_result_model.dart';
+import '../../../customer/order/data/models/vnpay_payment_model.dart';
+import '../../../customer/order/data/services/order_receipt_service.dart';
 
 class HistoryManagementView extends StatefulWidget {
   const HistoryManagementView({super.key});
@@ -31,16 +36,46 @@ enum _HistoryTimeFilter {
   final String label;
 }
 
+enum _HistoryPaymentFilter {
+  all('Tất cả thanh toán'),
+  unpaid('Chưa thanh toán'),
+  paid('Đã thanh toán');
+
+  const _HistoryPaymentFilter(this.label);
+  final String label;
+
+  bool matches(OrderDetailModel order) {
+    final status = order.paymentStatus.toUpperCase();
+    return switch (this) {
+      _HistoryPaymentFilter.all => true,
+      _HistoryPaymentFilter.unpaid => status == 'UNPAID',
+      _HistoryPaymentFilter.paid => status == 'PAID',
+    };
+  }
+}
+
+enum _StaffPaymentMethod {
+  cash('CASH', 'Tiền mặt'),
+  bankTransfer('CARD', 'Chuyển khoản'),
+  vnpay('VNPAY', 'VNPay');
+
+  const _StaffPaymentMethod(this.apiValue, this.label);
+  final String apiValue;
+  final String label;
+}
+
 class _HistoryManagementViewState extends State<HistoryManagementView> {
   static const Color _primary = Color(0xFFAA3B20);
   static const Color _surface = Color(0xFFF9F6F7);
 
   late final _HistoryOrderApiService _historyOrderApiService;
+  late final OrderReceiptService _orderReceiptService;
 
   List<OrderDetailModel> _orders = <OrderDetailModel>[];
   DateTime? _selectedDate;
   _HistorySortType _sortType = _HistorySortType.newest;
   _HistoryTimeFilter _timeFilter = _HistoryTimeFilter.all;
+  _HistoryPaymentFilter _paymentFilter = _HistoryPaymentFilter.all;
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -48,7 +83,9 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
   @override
   void initState() {
     super.initState();
-    _historyOrderApiService = _HistoryOrderApiService(apiClient: ApiClient());
+    final apiClient = ApiClient();
+    _historyOrderApiService = _HistoryOrderApiService(apiClient: apiClient);
+    _orderReceiptService = OrderReceiptService(apiClient);
     _loadOrders();
   }
 
@@ -119,10 +156,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
     }
 
     if (_errorMessage != null && _orders.isEmpty) {
-      return _ErrorState(
-        message: _errorMessage!,
-        onRetry: () => _loadOrders(),
-      );
+      return _ErrorState(message: _errorMessage!, onRetry: () => _loadOrders());
     }
 
     if (groups.isEmpty) {
@@ -131,10 +165,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
         onRefresh: () => _loadOrders(showLoading: false),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 180),
-            _EmptyState(),
-          ],
+          children: const [SizedBox(height: 180), _EmptyState()],
         ),
       );
     }
@@ -295,6 +326,12 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
             onTap: () => _showTimeFilterSheet(context),
           ),
           const SizedBox(width: 8),
+          _FilterPill(
+            icon: Icons.payments_rounded,
+            label: _paymentFilter.label,
+            onTap: () => _showPaymentFilterSheet(context),
+          ),
+          const SizedBox(width: 8),
           if (_selectedDate != null)
             TextButton(
               onPressed: () {
@@ -304,10 +341,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
               },
               child: const Text(
                 'Bỏ lọc ngày',
-                style: TextStyle(
-                  color: _primary,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(color: _primary, fontWeight: FontWeight.w800),
               ),
             ),
         ],
@@ -337,7 +371,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
         return false;
       }
 
-      return _matchTimeFilter(date);
+      return _matchTimeFilter(date) && _paymentFilter.matches(order);
     }).toList();
 
     result.sort((a, b) {
@@ -375,9 +409,9 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: _primary,
-                ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: _primary),
           ),
           child: child ?? const SizedBox.shrink(),
         );
@@ -475,6 +509,48 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
     );
   }
 
+  void _showPaymentFilterSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Lọc theo thanh toán',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+              ),
+              const Divider(height: 1),
+              for (final filter in _HistoryPaymentFilter.values)
+                ListTile(
+                  title: Text(
+                    filter.label,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  trailing: _paymentFilter == filter
+                      ? const Icon(Icons.check, color: _primary)
+                      : null,
+                  onTap: () {
+                    setState(() {
+                      _paymentFilter = filter;
+                    });
+                    Navigator.pop(sheetContext);
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _showPrintDialog(OrderDetailModel order) async {
     final allow = await showDialog<bool>(
       context: context,
@@ -485,7 +561,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
             style: TextStyle(fontWeight: FontWeight.w900),
           ),
           content: Text(
-            'Bạn có muốn in lại bill #${order.orderId.toString().padLeft(4, '0')} không?',
+            'Bạn có muốn xuất PDF bill #${order.orderId.toString().padLeft(4, '0')} không?',
           ),
           actions: [
             TextButton(
@@ -495,7 +571,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
             ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               style: ElevatedButton.styleFrom(backgroundColor: _primary),
-              child: const Text('In bill'),
+              child: const Text('Xuất PDF'),
             ),
           ],
         );
@@ -504,13 +580,32 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
 
     if (allow != true || !mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Đã gửi yêu cầu in lại bill #${order.orderId.toString().padLeft(4, '0')} (UI mock).',
+    try {
+      final filePath = await _orderReceiptService.exportReceiptPdf(
+        order.orderId,
+      );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            filePath.isEmpty
+                ? 'Đã xuất hóa đơn PDF.'
+                : 'Đã xuất hóa đơn PDF: $filePath',
+          ),
         ),
-      ),
-    );
+      );
+    } on OrderReceiptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể xuất hóa đơn PDF.')),
+      );
+    }
   }
 
   Future<void> _openOrderDetail(OrderDetailModel order) async {
@@ -532,11 +627,19 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
 
     if (!mounted) return;
 
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _HistoryOrderDetailPage(order: detailOrder),
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => _HistoryOrderDetailPage(
+          order: detailOrder,
+          historyOrderApiService: _historyOrderApiService,
+          orderReceiptService: _orderReceiptService,
+        ),
       ),
     );
+
+    if (changed == true && mounted) {
+      await _loadOrders(showLoading: false);
+    }
   }
 
   DateTime _orderDate(OrderDetailModel order) {
@@ -558,7 +661,7 @@ class _HistoryManagementViewState extends State<HistoryManagementView> {
 
 class _HistoryOrderApiService {
   const _HistoryOrderApiService({required ApiClient apiClient})
-      : _apiClient = apiClient;
+    : _apiClient = apiClient;
 
   final ApiClient _apiClient;
 
@@ -611,9 +714,7 @@ query GetOrder($orderId: String!) {
   Future<List<OrderDetailModel>> fetchOrders() async {
     final response = await _apiClient.dio.post<Map<String, dynamic>>(
       ApiConfig.graphqlUrl,
-      data: <String, dynamic>{
-        'query': _ordersQuery,
-      },
+      data: <String, dynamic>{'query': _ordersQuery},
     );
 
     final body = response.data;
@@ -645,9 +746,7 @@ query GetOrder($orderId: String!) {
       ApiConfig.graphqlUrl,
       data: <String, dynamic>{
         'query': _orderDetailQuery,
-        'variables': <String, dynamic>{
-          'orderId': orderId.toString(),
-        },
+        'variables': <String, dynamic>{'orderId': orderId.toString()},
       },
     );
 
@@ -671,6 +770,59 @@ query GetOrder($orderId: String!) {
     return OrderDetailModel.fromJson(_normalizeOrderJson(rawOrder));
   }
 
+  Future<PaymentProcessResultModel> processPayment({
+    required OrderDetailModel order,
+    required String paymentMethod,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/payment/process',
+        data: <String, dynamic>{
+          'orderId': order.orderId,
+          'paymentMethod': paymentMethod,
+          'amount': order.totalAmount,
+          'confirmPayment': true,
+        },
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return PaymentProcessResultModel.fromJson(data);
+      }
+
+      throw Exception('Không thể xử lý thanh toán.');
+    } on DioException catch (error) {
+      throw Exception(_paymentMessageFromDio(error));
+    }
+  }
+
+  Future<VNPayPaymentModel> createVNPayPayment(OrderDetailModel order) async {
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/payment/vnpay',
+        data: <String, dynamic>{
+          'total': order.totalAmount.round(),
+          'orderInfo': 'Payment for Order: ${order.orderId}',
+          'returnUrl': '${ApiConfig.baseUrl}/payment/vnpay_payment',
+          'orderId': order.orderId,
+        },
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        final payment = VNPayPaymentModel.fromJson(data);
+        if (payment.paymentUrl.trim().isEmpty) {
+          throw Exception('Backend chưa trả link VNPay.');
+        }
+        return payment;
+      }
+
+      throw Exception('Không thể tạo thanh toán VNPay.');
+    } on DioException catch (error) {
+      throw Exception(_paymentMessageFromDio(error));
+    }
+  }
+
   Map<String, dynamic> _normalizeOrderJson(Map<dynamic, dynamic> raw) {
     final rawItems = raw['items'];
 
@@ -685,9 +837,9 @@ query GetOrder($orderId: String!) {
       'orderDate': raw['orderDate'],
       'items': rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((item) => _normalizeOrderItemJson(item))
-              .toList()
+                .whereType<Map>()
+                .map((item) => _normalizeOrderItemJson(item))
+                .toList()
           : <Map<String, dynamic>>[],
     };
   }
@@ -730,6 +882,31 @@ query GetOrder($orderId: String!) {
     if (value is num) return value.toDouble();
 
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _paymentMessageFromDio(DioException error) {
+    final data = error.response?.data;
+    if (data is Map<String, dynamic>) {
+      final message = data['message']?.toString();
+      if (message != null && message.trim().isNotEmpty) {
+        return message;
+      }
+    }
+
+    if (data is String && data.trim().isNotEmpty) {
+      return data;
+    }
+
+    final statusCode = error.response?.statusCode;
+    return switch (statusCode) {
+      400 => 'Thông tin thanh toán chưa hợp lệ.',
+      401 => 'Vui lòng đăng nhập lại trước khi thanh toán.',
+      403 => 'Bạn không có quyền thanh toán đơn hàng này.',
+      404 => 'Không tìm thấy đơn hàng cần thanh toán.',
+      409 => 'Đơn hàng này đã được thanh toán.',
+      500 => 'Máy chủ chưa thể xử lý thanh toán.',
+      _ => 'Không thể kết nối đến máy chủ nhà hàng.',
+    };
   }
 }
 
@@ -1064,9 +1241,7 @@ class _LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: CircularProgressIndicator(
-        color: Color(0xFFAA3B20),
-      ),
+      child: CircularProgressIndicator(color: Color(0xFFAA3B20)),
     );
   }
 }
@@ -1090,10 +1265,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -1143,10 +1315,7 @@ class _ErrorState extends StatelessWidget {
 }
 
 class _InlineErrorBanner extends StatelessWidget {
-  const _InlineErrorBanner({
-    required this.message,
-    required this.onRetry,
-  });
+  const _InlineErrorBanner({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -1194,259 +1363,500 @@ class _InlineErrorBanner extends StatelessWidget {
   }
 }
 
-class _HistoryOrderDetailPage extends StatelessWidget {
-  const _HistoryOrderDetailPage({required this.order});
+class _HistoryOrderDetailPage extends StatefulWidget {
+  const _HistoryOrderDetailPage({
+    required this.order,
+    required this.historyOrderApiService,
+    required this.orderReceiptService,
+  });
 
-  static const Color _primary = Color(0xFFAA3B20);
   final OrderDetailModel order;
+  final _HistoryOrderApiService historyOrderApiService;
+  final OrderReceiptService orderReceiptService;
+
+  @override
+  State<_HistoryOrderDetailPage> createState() =>
+      _HistoryOrderDetailPageState();
+}
+
+class _HistoryOrderDetailPageState extends State<_HistoryOrderDetailPage> {
+  static const Color _primary = Color(0xFFAA3B20);
+
+  late OrderDetailModel _order;
+  _StaffPaymentMethod _paymentMethod = _StaffPaymentMethod.cash;
+  bool _isProcessingPayment = false;
+  bool _changed = false;
+  String _paymentMessage = '';
+  String _vnpayUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _order = widget.order;
+  }
+
+  bool get _isPaid => _order.paymentStatus.toUpperCase() == 'PAID';
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = _calculateSubtotal(order);
-    final serviceTax = _calculateServiceTax(order);
-    final total = _calculateFinalTotal(order);
+    final subtotal = _calculateSubtotal(_order);
+    final total = _calculateFinalTotal(_order);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F7),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              height: 52,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF8F8FA),
-                border: Border(
-                  bottom: BorderSide(color: Color(0xFFE7D8D3)),
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      color: Color(0xFF8D8A8F),
-                      size: 20,
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: const Color(0xFFE7D8D3),
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.restaurant_menu_rounded,
-                              size: 16,
-                              color: Color(0xFF9A9AA0),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Bon Appétit',
-                            style: TextStyle(
-                              color: _primary,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 40),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                children: [
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.receipt_long_rounded,
-                        color: _primary,
-                        size: 20,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Chi tiết món ăn',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF262429),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  ...order.items.map((item) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _DetailDishCard(item: item),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFECE0DD)),
-                    ),
-                    child: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _changed);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3F4F7),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(context),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                  children: [
+                    const Row(
                       children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.chair_alt_rounded,
-                              size: 18,
-                              color: Color(0xFF66656B),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Vị trí: Bàn ${order.tableNumber.toString().padLeft(2, '0')}',
-                              style: const TextStyle(
-                                color: Color(0xFF4A4A4F),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            const Icon(
-                              Icons.fingerprint_rounded,
-                              size: 18,
-                              color: Color(0xFF66656B),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Mã đơn: #BA-${order.orderId.toString().padLeft(4, '0')}',
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  color: Color(0xFF4A4A4F),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
+                        Icon(
+                          Icons.receipt_long_rounded,
+                          color: _primary,
+                          size: 20,
                         ),
-                        const SizedBox(height: 12),
-                        const Divider(color: Color(0xFFE8E4E2), height: 1),
-                        const SizedBox(height: 10),
-                        _SummaryRow(
-                          label: 'Tạm tính',
-                          value: _formatCurrency(subtotal),
-                        ),
-                        const SizedBox(height: 8),
-                        _SummaryRow(
-                          label: 'Phí phục vụ & Thuế (12%)',
-                          value: _formatCurrency(serviceTax),
-                        ),
-                        const SizedBox(height: 10),
-                        const _DashedLine(color: Color(0xFFE9D3CC)),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Tổng thanh toán',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFF262429),
-                                ),
-                              ),
-                            ),
-                            Text(
-                              _formatCurrency(total),
-                              style: const TextStyle(
-                                color: _primary,
-                                fontSize: 25,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
+                        SizedBox(width: 8),
+                        Text(
+                          'Chi tiết món ăn',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF262429),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(
+                    const SizedBox(height: 14),
+                    ..._order.items.map((item) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _DetailDishCard(item: item),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    _buildSummary(subtotal: subtotal, total: total),
+                    if (!_isPaid) ...[
+                      const SizedBox(height: 16),
+                      _buildPaymentPanel(),
+                    ],
+                    if (_paymentMessage.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _MessagePanel(
+                        message: _paymentMessage,
+                        isError: _paymentMessage.startsWith('Lỗi:'),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    AppCtaButton(
+                      label: 'Về trang chủ',
+                      onPressed: () => Navigator.pop(context, _changed),
+                      backgroundColor: const Color(0xFFB84F32),
+                      height: 52,
+                      borderRadius: 12,
+                      fontSize: 16,
+                      trailing: const Icon(
                         Icons.chevron_left_rounded,
                         color: Colors.white,
-                        size: 24,
-                      ),
-                      label: const Text(
-                        'Về trang chủ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFB84F32),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
+                        size: 22,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showPrintDialog(context),
-                      icon: const Icon(
+                    const SizedBox(height: 10),
+                    AppCtaButton(
+                      label: 'In PDF',
+                      onPressed: _showPrintDialog,
+                      backgroundColor: const Color(0xFFD0D4DD),
+                      foregroundColor: _primary,
+                      height: 52,
+                      borderRadius: 12,
+                      fontSize: 16,
+                      trailing: const Icon(
                         Icons.receipt_long_rounded,
                         color: _primary,
                         size: 18,
                       ),
-                      label: const Text(
-                        'In PDF',
-                        style: TextStyle(
-                          color: _primary,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD0D4DD),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _showPrintDialog(BuildContext context) async {
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8F8FA),
+        border: Border(bottom: BorderSide(color: Color(0xFFE7D8D3))),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context, _changed),
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF8D8A8F),
+              size: 20,
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFE7D8D3)),
+                    ),
+                    child: const Icon(
+                      Icons.restaurant_menu_rounded,
+                      size: 16,
+                      color: Color(0xFF9A9AA0),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Bon Appétit',
+                    style: TextStyle(
+                      color: _primary,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummary({required double subtotal, required double total}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFECE0DD)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.chair_alt_rounded,
+                size: 18,
+                color: Color(0xFF66656B),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Vị trí: Bàn ${_order.tableNumber.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: Color(0xFF4A4A4F),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Icon(
+                Icons.fingerprint_rounded,
+                size: 18,
+                color: Color(0xFF66656B),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Mã đơn: #BA-${_order.orderId.toString().padLeft(4, '0')}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: Color(0xFF4A4A4F),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Color(0xFFE8E4E2), height: 1),
+          const SizedBox(height: 10),
+          _SummaryRow(label: 'Tạm tính', value: _formatCurrency(subtotal)),
+          const SizedBox(height: 10),
+          const _DashedLine(color: Color(0xFFE9D3CC)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Tổng thanh toán',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF262429),
+                  ),
+                ),
+              ),
+              Text(
+                _formatCurrency(total),
+                style: const TextStyle(
+                  color: _primary,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentPanel() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7EB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE8CBA0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.payments_rounded, color: _primary, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Hỗ trợ thanh toán',
+                style: TextStyle(
+                  color: Color(0xFF5C321E),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE6D6D1)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<_StaffPaymentMethod>(
+                value: _paymentMethod,
+                isExpanded: true,
+                items: _StaffPaymentMethod.values.map((method) {
+                  return DropdownMenuItem<_StaffPaymentMethod>(
+                    value: method,
+                    child: Text(
+                      method.label,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  );
+                }).toList(),
+                onChanged: _isProcessingPayment
+                    ? null
+                    : (method) {
+                        if (method == null) return;
+                        setState(() {
+                          _paymentMethod = method;
+                          _paymentMessage = '';
+                        });
+                      },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppCtaButton(
+            label: _paymentMethod == _StaffPaymentMethod.vnpay
+                ? 'Tạo thanh toán VNPay'
+                : _isProcessingPayment
+                ? 'Đang xác nhận...'
+                : 'Xác nhận đã nhận tiền',
+            onPressed: _handlePaymentAction,
+            enabled: !_isProcessingPayment,
+            backgroundColor: const Color(0xFFAA3B20),
+            height: 50,
+            borderRadius: 10,
+            fontSize: 15,
+          ),
+          if (_vnpayUrl.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            AppCtaButton(
+              label: 'Mở lại VNPay',
+              onPressed: () => _openVNPay(_vnpayUrl),
+              backgroundColor: const Color(0xFF234B8E),
+              height: 48,
+              borderRadius: 10,
+              fontSize: 14,
+              trailing: const Icon(
+                Icons.open_in_new_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AppCtaButton(
+              label: 'Kiểm tra trạng thái thanh toán',
+              onPressed: _refreshOrderStatus,
+              enabled: !_isProcessingPayment,
+              backgroundColor: const Color(0xFF4C7A38),
+              height: 48,
+              borderRadius: 10,
+              fontSize: 14,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handlePaymentAction() async {
+    if (_paymentMethod == _StaffPaymentMethod.vnpay) {
+      await _createVNPayPayment();
+      return;
+    }
+
+    setState(() {
+      _isProcessingPayment = true;
+      _paymentMessage = '';
+    });
+
+    try {
+      final result = await widget.historyOrderApiService.processPayment(
+        order: _order,
+        paymentMethod: _paymentMethod.apiValue,
+      );
+      final latest = await widget.historyOrderApiService.fetchOrderById(
+        _order.orderId,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _order = latest;
+        _changed = true;
+        _paymentMessage = result.message.isNotEmpty
+            ? result.message
+            : 'Đã xác nhận thanh toán.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _paymentMessage =
+            'Lỗi: ${error.toString().replaceFirst('Exception: ', '')}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingPayment = false);
+      }
+    }
+  }
+
+  Future<void> _createVNPayPayment() async {
+    setState(() {
+      _isProcessingPayment = true;
+      _paymentMessage = '';
+      _vnpayUrl = '';
+    });
+
+    try {
+      final payment = await widget.historyOrderApiService.createVNPayPayment(
+        _order,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _vnpayUrl = payment.paymentUrl;
+        _paymentMessage =
+            'Đã tạo link VNPay. Sau khi khách thanh toán, bấm kiểm tra trạng thái.';
+      });
+      await _openVNPay(payment.paymentUrl);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _paymentMessage =
+            'Lỗi: ${error.toString().replaceFirst('Exception: ', '')}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingPayment = false);
+      }
+    }
+  }
+
+  Future<void> _openVNPay(String paymentUrl) async {
+    final uri = Uri.tryParse(paymentUrl);
+    if (uri == null) {
+      setState(() => _paymentMessage = 'Lỗi: Link VNPay không hợp lệ.');
+      return;
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+
+    setState(() {
+      _paymentMessage = opened
+          ? 'Đã mở VNPay. Sau khi khách thanh toán, bấm kiểm tra trạng thái.'
+          : 'Lỗi: Không thể mở VNPay trên thiết bị này.';
+    });
+  }
+
+  Future<void> _refreshOrderStatus() async {
+    setState(() {
+      _isProcessingPayment = true;
+      _paymentMessage = '';
+    });
+
+    try {
+      final latest = await widget.historyOrderApiService.fetchOrderById(
+        _order.orderId,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _order = latest;
+        _changed = true;
+        _paymentMessage = latest.paymentStatus.toUpperCase() == 'PAID'
+            ? 'Thanh toán đã hoàn tất.'
+            : 'Đơn hàng vẫn chưa được thanh toán.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _paymentMessage =
+            'Lỗi: ${error.toString().replaceFirst('Exception: ', '')}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingPayment = false);
+      }
+    }
+  }
+
+  Future<void> _showPrintDialog() async {
     final allow = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -1456,7 +1866,7 @@ class _HistoryOrderDetailPage extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.w900),
           ),
           content: Text(
-            'Bạn có muốn in lại bill #${order.orderId.toString().padLeft(4, '0')} không?',
+            'Bạn có muốn xuất PDF bill #${_order.orderId.toString().padLeft(4, '0')} không?',
           ),
           actions: [
             TextButton(
@@ -1466,19 +1876,68 @@ class _HistoryOrderDetailPage extends StatelessWidget {
             ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               style: ElevatedButton.styleFrom(backgroundColor: _primary),
-              child: const Text('In bill'),
+              child: const Text('Xuất PDF'),
             ),
           ],
         );
       },
     );
 
-    if (allow != true || !context.mounted) return;
+    if (allow != true || !mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Đã gửi yêu cầu in PDF bill #${order.orderId.toString().padLeft(4, '0')} (UI mock).',
+    try {
+      final filePath = await widget.orderReceiptService.exportReceiptPdf(
+        _order.orderId,
+      );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            filePath.isEmpty
+                ? 'Đã xuất hóa đơn PDF.'
+                : 'Đã xuất hóa đơn PDF: $filePath',
+          ),
+        ),
+      );
+    } on OrderReceiptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể xuất hóa đơn PDF.')),
+      );
+    }
+  }
+}
+
+class _MessagePanel extends StatelessWidget {
+  const _MessagePanel({required this.message, required this.isError});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isError ? const Color(0xFFFFE9E6) : const Color(0xFFEAF7E8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isError ? const Color(0xFFE2A19A) : const Color(0xFFAFD4A7),
+        ),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(
+          color: isError ? const Color(0xFF9E2F23) : const Color(0xFF2F6B28),
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          height: 1.35,
         ),
       ),
     );
@@ -1636,9 +2095,7 @@ class _DashedLine extends StatelessWidget {
             (_) => SizedBox(
               width: 4,
               height: 1.2,
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: color),
-              ),
+              child: DecoratedBox(decoration: BoxDecoration(color: color)),
             ),
           ),
         );
@@ -1652,21 +2109,11 @@ double _calculateSubtotal(OrderDetailModel order) {
     return order.totalAmount;
   }
 
-  return order.items.fold<double>(
-    0,
-    (sum, item) => sum + item.subtotal,
-  );
-}
-
-double _calculateServiceTax(OrderDetailModel order) {
-  final subtotal = _calculateSubtotal(order);
-  return (subtotal * 0.12).roundToDouble();
+  return order.items.fold<double>(0, (sum, item) => sum + item.subtotal);
 }
 
 double _calculateFinalTotal(OrderDetailModel order) {
-  final subtotal = _calculateSubtotal(order);
-  final serviceTax = _calculateServiceTax(order);
-  return subtotal + serviceTax;
+  return _calculateSubtotal(order);
 }
 
 String _formatCurrency(double amount) {
