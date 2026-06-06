@@ -8,7 +8,7 @@ class ChatbotService {
 
   Future<String?> sendMessage(String message, List<Map<String, dynamic>> history) async {
     try {
-      final response = await _apiClient.post(
+      final response = await _apiClient.dio.post(
         '/api/chatbot/ask',
         data: {
           'message': message,
