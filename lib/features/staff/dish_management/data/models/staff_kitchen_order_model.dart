@@ -72,7 +72,7 @@ class StaffKitchenOrderModel {
       tableNumber: tableNumber == null ? 'T-??' : 'T-${tableNumber.toString().padLeft(2, '0')}',
       items: parsedItems,
       status: _statusFromApi(json['status']?.toString()),
-      createdAt: _parseDateTime(json['reservationTime']),
+      createdAt: _parseDateTime(json['reservationTime'] ?? json['orderDate']),
       note: null,
       alertText: firstNote,
     );

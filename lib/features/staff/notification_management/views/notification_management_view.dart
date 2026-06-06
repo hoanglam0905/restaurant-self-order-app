@@ -426,6 +426,12 @@ class _NotificationManagementViewState
           accentColor: Color(0xFF2563EB),
           bubbleColor: Color(0xFFEFF6FF),
         );
+      case 'NEW_RESERVATION':
+        return const _NotificationTypeStyle(
+          icon: Icons.event_available_rounded,
+          accentColor: Color(0xFFC98100),
+          bubbleColor: Color(0xFFFFF8EA),
+        );
       case 'CALL_STAFF':
         return const _NotificationTypeStyle(
           icon: Icons.notifications_rounded,
@@ -451,6 +457,8 @@ class _NotificationManagementViewState
     switch (type) {
       case 'NEW_ORDER':
         return 'ĐƠN MỚI';
+      case 'NEW_RESERVATION':
+        return 'ĐẶT BÀN';
       case 'CALL_STAFF':
         return 'GỌI NHÂN VIÊN';
       case 'PAYMENT_REQUEST':
@@ -464,6 +472,8 @@ class _NotificationManagementViewState
     switch (type) {
       case 'NEW_ORDER':
         return 'Khách vừa đặt món';
+      case 'NEW_RESERVATION':
+        return 'Khách vừa đặt bàn';
       case 'CALL_STAFF':
         return 'Hỗ trợ tại bàn';
       case 'PAYMENT_REQUEST':

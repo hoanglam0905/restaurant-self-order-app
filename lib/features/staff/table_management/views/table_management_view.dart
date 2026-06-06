@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../dish_management/data/models/staff_kitchen_order_item_model.dart';
@@ -1312,6 +1312,7 @@ class TableManagementView extends StatelessWidget {
     return switch (type) {
       'CALL_STAFF' => 'Gọi nhân viên',
       'NEW_ORDER' => 'Đơn món mới',
+      'NEW_RESERVATION' => 'Đơn đặt bàn',
       'PAYMENT_REQUEST' => 'Yêu cầu thanh toán',
       _ => 'Yêu cầu khác',
     };
