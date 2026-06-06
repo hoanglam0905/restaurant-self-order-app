@@ -99,6 +99,11 @@ class _HomeViewState extends State<HomeView> {
             return;
           }
 
+          if (index == 1) {
+            _openReservation(context);
+            return;
+          }
+
           if (index == 2) {
             _openViewOnlyMenu(context);
             return;
