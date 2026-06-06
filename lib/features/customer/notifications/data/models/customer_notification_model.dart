@@ -1,6 +1,7 @@
 import '../../../order/data/models/customer_order_websocket_event.dart';
+import 'customer_staff_request_notification_model.dart';
 
-enum CustomerNotificationKind { order, orderItem, payment }
+enum CustomerNotificationKind { order, orderItem, payment, staffRequest }
 
 class CustomerNotificationModel {
   const CustomerNotificationModel({
@@ -85,6 +86,61 @@ class CustomerNotificationModel {
       orderId: event.orderId,
       tableNumber: event.tableNumber,
     );
+  }
+
+  factory CustomerNotificationModel.fromHandledStaffRequest(
+    CustomerStaffRequestNotificationModel request,
+  ) {
+    final createdAt = DateTime.now();
+    final isPayment = request.isPaymentRequest;
+    return CustomerNotificationModel(
+      id: 'staff-request-${request.notificationId}-${createdAt.microsecondsSinceEpoch}',
+      kind: CustomerNotificationKind.staffRequest,
+      title: isPayment
+          ? 'Yeu cau thanh toan da xu ly'
+          : 'Yeu cau goi nhan vien da xu ly',
+      message: isPayment
+          ? 'Nhan vien da tiep nhan yeu cau thanh toan${_orderSuffix(request.orderId)}.'
+          : 'Nhan vien da xu ly yeu cau ho tro tai ban${request.tableNumber == null ? '' : ' #${request.tableNumber}'}.',
+      createdAt: createdAt,
+      isRead: false,
+      orderId: request.orderId,
+      tableNumber: request.tableNumber,
+    );
+  }
+
+  factory CustomerNotificationModel.fromJson(Map<dynamic, dynamic> json) {
+    final kindName = json['kind']?.toString() ?? '';
+    return CustomerNotificationModel(
+      id: json['id']?.toString() ?? '',
+      kind: CustomerNotificationKind.values.firstWhere(
+        (kind) => kind.name == kindName,
+        orElse: () => CustomerNotificationKind.order,
+      ),
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
+      isRead: json['isRead'] as bool? ?? false,
+      orderId: (json['orderId'] as num?)?.toInt(),
+      tableNumber: (json['tableNumber'] as num?)?.toInt(),
+      dishName: json['dishName']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'kind': kind.name,
+      'title': title,
+      'message': message,
+      'createdAt': createdAt.toIso8601String(),
+      'isRead': isRead,
+      'orderId': orderId,
+      'tableNumber': tableNumber,
+      'dishName': dishName,
+    };
   }
 
   CustomerNotificationModel copyWith({bool? isRead}) {

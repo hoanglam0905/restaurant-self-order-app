@@ -1,9 +1,10 @@
-﻿import 'package:get/get.dart';
+import 'package:get/get.dart';
 
 import '../../dish_management/data/models/staff_kitchen_order_model.dart';
 import '../../dish_management/data/services/kitchen_service.dart';
 import '../data/models/staff_table_model.dart';
 import '../data/models/table_notification_model.dart';
+import '../data/models/table_order_model.dart';
 import '../data/models/table_status.dart';
 import '../data/services/table_service.dart';
 
@@ -38,13 +39,14 @@ class TableController extends GetxController {
 
     try {
       final fetchedTables = await _tableService.getTables();
+      final tableOrders = await _getOrdersForTableStatus();
 
       List<TableNotificationModel> currentNotifications =
           <TableNotificationModel>[];
 
       try {
-        currentNotifications =
-            await _tableService.getCurrentShiftNotifications();
+        currentNotifications = await _tableService
+            .getCurrentShiftNotifications();
       } catch (_) {
         currentNotifications = <TableNotificationModel>[];
       }
@@ -59,7 +61,13 @@ class TableController extends GetxController {
 
       tables.assignAll(
         fetchedTables.map((table) {
+          final resolvedStatus = _resolveTableStatus(
+            table: table,
+            orders: tableOrders,
+          );
+
           return table.copyWith(
+            status: resolvedStatus,
             hasAlert: unreadTableIds.contains(table.id),
           );
         }).toList(),
@@ -121,12 +129,16 @@ class TableController extends GetxController {
     }
   }
 
-  Future<List<TableNotificationModel>> getTableNotifications(int tableId) async {
+  Future<List<TableNotificationModel>> getTableNotifications(
+    int tableId,
+  ) async {
     isActionLoading.value = true;
     errorMessage.value = '';
 
     try {
-      final notifications = await _tableService.getNotificationsByTable(tableId);
+      final notifications = await _tableService.getNotificationsByTable(
+        tableId,
+      );
 
       tableNotificationsByTableId[tableId] = notifications;
       _refreshTableAlertsFromCache();
@@ -215,6 +227,15 @@ class TableController extends GetxController {
     errorMessage.value = '';
 
     try {
+      if (status == TableStatus.available) {
+        final canRelease = await _canReleaseTable(tableId);
+        if (!canRelease) {
+          errorMessage.value =
+              'Chỉ chuyển bàn trống khi tất cả món đã hoàn tất/hủy và đơn đã thanh toán.';
+          return false;
+        }
+      }
+
       await _tableService.updateTableStatus(
         tableId: tableId,
         status: status.toJson(),
@@ -253,9 +274,7 @@ class TableController extends GetxController {
     }
   }
 
-  void _cacheNotificationsByTable(
-    List<TableNotificationModel> notifications,
-  ) {
+  void _cacheNotificationsByTable(List<TableNotificationModel> notifications) {
     final grouped = <int, List<TableNotificationModel>>{};
 
     for (final notification in notifications) {
@@ -268,6 +287,70 @@ class TableController extends GetxController {
     }
 
     tableNotificationsByTableId.assignAll(grouped);
+  }
+
+  Future<List<TableOrderModel>?> _getOrdersForTableStatus() async {
+    try {
+      return await _tableService.getOrders();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> _canReleaseTable(int tableId) async {
+    final orders = await _tableService.getOrders();
+    return _resolveTableStatusFromOrders(tableId, orders) ==
+        TableStatus.available;
+  }
+
+  TableStatus _resolveTableStatus({
+    required StaffTableModel table,
+    required List<TableOrderModel>? orders,
+  }) {
+    if (orders == null) {
+      return table.status;
+    }
+
+    return _resolveTableStatusFromOrders(table.id, orders);
+  }
+
+  TableStatus _resolveTableStatusFromOrders(
+    int tableId,
+    List<TableOrderModel> orders,
+  ) {
+    final tableOrders = orders
+        .where((order) => order.tableNumber == tableId)
+        .toList();
+
+    if (tableOrders.isEmpty) {
+      return TableStatus.available;
+    }
+
+    final hasScheduledReservation = tableOrders.any(
+      (order) => order.isScheduledReservation,
+    );
+
+    final diningOrders = tableOrders
+        .where((order) => !order.isScheduledReservation)
+        .toList();
+
+    if (diningOrders.isEmpty) {
+      return hasScheduledReservation
+          ? TableStatus.reserved
+          : TableStatus.available;
+    }
+
+    final hasUnreleasedDiningOrder = diningOrders.any(
+      (order) => !order.canReleaseTable,
+    );
+
+    if (hasUnreleasedDiningOrder) {
+      return TableStatus.occupied;
+    }
+
+    return hasScheduledReservation
+        ? TableStatus.reserved
+        : TableStatus.available;
   }
 
   void _updateCachedNotificationReadStatus({
@@ -300,9 +383,7 @@ class TableController extends GetxController {
 
     tables.assignAll(
       tables.map((table) {
-        return table.copyWith(
-          hasAlert: unreadTableIds.contains(table.id),
-        );
+        return table.copyWith(hasAlert: unreadTableIds.contains(table.id));
       }).toList(),
     );
   }

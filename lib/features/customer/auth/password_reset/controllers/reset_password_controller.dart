@@ -20,6 +20,12 @@ class ResetPasswordController extends GetxController {
   final RxBool obscureConfirmPassword = true.obs;
   final RxString errorMessage = ''.obs;
 
+  @override
+  void onInit() {
+    super.onInit();
+    otpTextController.text = '123456';
+  }
+
   void togglePasswordVisibility() {
     obscurePassword.value = !obscurePassword.value;
   }

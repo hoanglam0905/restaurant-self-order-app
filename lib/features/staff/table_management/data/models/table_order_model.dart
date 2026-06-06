@@ -35,6 +35,18 @@ class TableOrderModel {
 
   bool get isActive => !isPaid && !isCancelled && !isFinished;
 
+  bool get isScheduledReservation {
+    return reservationTime != null && status.toUpperCase() == 'SCHEDULED';
+  }
+
+  bool get areAllItemsCompletedOrCancelled {
+    return items.every((item) => item.isCompletedOrCancelled);
+  }
+
+  bool get canReleaseTable {
+    return isPaid && areAllItemsCompletedOrCancelled;
+  }
+
   factory TableOrderModel.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
 
@@ -83,6 +95,7 @@ class TableOrderItemModel {
     required this.name,
     required this.quantity,
     required this.note,
+    required this.status,
     this.unitPrice,
     this.totalPrice,
     this.imageUrl,
@@ -92,9 +105,15 @@ class TableOrderItemModel {
   final String name;
   final int quantity;
   final String note;
+  final String status;
   final int? unitPrice;
   final int? totalPrice;
   final String? imageUrl;
+
+  bool get isCompletedOrCancelled {
+    final value = status.toUpperCase();
+    return value == 'COMPLETED' || value == 'CANCELLED' || value == 'CANCELED';
+  }
 
   factory TableOrderItemModel.fromJson(Map<String, dynamic> json) {
     final dishId = _asInt(json['dishId']);
@@ -132,6 +151,7 @@ class TableOrderItemModel {
       name: name.isEmpty ? 'Món #${dishId ?? ''}' : name,
       quantity: quantity,
       note: (json['notes'] ?? json['note'] ?? '').toString(),
+      status: (json['status'] ?? 'PENDING').toString(),
       unitPrice: unitPrice,
       totalPrice: totalPrice,
       imageUrl: (json['imageUrl'] ?? json['image'] ?? dishData['imageUrl'])

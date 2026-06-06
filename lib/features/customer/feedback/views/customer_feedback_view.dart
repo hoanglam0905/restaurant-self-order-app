@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -7,6 +9,7 @@ import '../../../../core/widgets/app_back_icon_button.dart';
 import '../../../../core/widgets/app_cta_button.dart';
 import '../../../../core/widgets/app_state_panel.dart';
 import '../controllers/customer_feedback_controller.dart';
+import '../data/models/customer_feedback_model.dart';
 import '../data/services/customer_feedback_service.dart';
 
 class CustomerFeedbackView extends StatefulWidget {
@@ -55,6 +58,7 @@ class _CustomerFeedbackViewState extends State<CustomerFeedbackView> {
       tag: _controllerTag,
     );
     _commentController = TextEditingController();
+    unawaited(_controller.loadExistingFeedback(widget.orderId));
   }
 
   @override
@@ -69,8 +73,104 @@ class _CustomerFeedbackViewState extends State<CustomerFeedbackView> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F9),
       body: SafeArea(
-        child: _submitted ? _buildThanksPage() : _buildFeedbackForm(),
+        child: Obx(() {
+          if (_controller.isLoadingExistingFeedback.value) {
+            return const AppStatePanel(message: 'Dang kiem tra danh gia...');
+          }
+
+          final existingFeedback = _controller.existingFeedback.value;
+          if (!_submitted && existingFeedback != null) {
+            return _buildExistingFeedback(existingFeedback);
+          }
+
+          return _submitted ? _buildThanksPage() : _buildFeedbackForm();
+        }),
       ),
+    );
+  }
+
+  Widget _buildExistingFeedback(CustomerFeedbackModel feedback) {
+    final satisfied = feedback.rating >= 4;
+    final tags = feedback.selectedTags;
+    final comment = feedback.displayComment;
+
+    return Column(
+      children: [
+        _FeedbackTopBar(onBack: () => Navigator.pop(context, false)),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
+            children: [
+              const Text(
+                'Ban da danh gia don hang nay',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF161C23),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                satisfied ? 'Rat hai long' : 'Chua hai long',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _StarRating(rating: feedback.rating, onChanged: null),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                _FeedbackTagWrap(
+                  tags: tags,
+                  selectedTags: tags.toSet(),
+                  onToggle: (_) {},
+                  enabled: false,
+                ),
+              ],
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(minHeight: 120),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF1F1F22)),
+                ),
+                child: Text(
+                  comment.isEmpty
+                      ? 'Khach hang khong de lai nhan xet.'
+                      : comment,
+                  style: const TextStyle(
+                    color: Color(0xFF686267),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 54),
+              Center(
+                child: SizedBox(
+                  width: 120,
+                  child: AppCtaButton(
+                    label: 'XONG',
+                    onPressed: () => Navigator.pop(context, false),
+                    backgroundColor: Colors.black,
+                    borderRadius: 6,
+                    height: 44,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -328,7 +428,7 @@ class _StarRating extends StatelessWidget {
   const _StarRating({required this.rating, required this.onChanged});
 
   final int rating;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<int>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -340,7 +440,7 @@ class _StarRating extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(24),
-            onTap: () => onChanged(value),
+            onTap: onChanged == null ? null : () => onChanged!(value),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               child: Icon(
@@ -363,11 +463,13 @@ class _FeedbackTagWrap extends StatelessWidget {
     required this.tags,
     required this.selectedTags,
     required this.onToggle,
+    this.enabled = true,
   });
 
   final List<String> tags;
   final Set<String> selectedTags;
   final ValueChanged<String> onToggle;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -380,7 +482,7 @@ class _FeedbackTagWrap extends StatelessWidget {
         return ChoiceChip(
           label: Text(tag),
           selected: selected,
-          onSelected: (_) => onToggle(tag),
+          onSelected: enabled ? (_) => onToggle(tag) : null,
           showCheckmark: false,
           backgroundColor: const Color(0xFFE4E1E3),
           selectedColor: AppColors.orderAccent.withValues(alpha: 0.14),

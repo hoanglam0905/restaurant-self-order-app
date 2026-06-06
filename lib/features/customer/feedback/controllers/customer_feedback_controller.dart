@@ -15,10 +15,33 @@ class CustomerFeedbackController extends GetxController {
   final CustomerFeedbackService _feedbackService;
   final AuthSessionStorage _authSessionStorage;
 
+  final RxBool isLoadingExistingFeedback = false.obs;
   final RxBool isSubmitting = false.obs;
   final RxString errorMessage = ''.obs;
+  final Rxn<CustomerFeedbackModel> existingFeedback =
+      Rxn<CustomerFeedbackModel>();
   final Rxn<CustomerFeedbackModel> submittedFeedback =
       Rxn<CustomerFeedbackModel>();
+
+  Future<void> loadExistingFeedback(int orderId) async {
+    isLoadingExistingFeedback.value = true;
+    errorMessage.value = '';
+
+    try {
+      final feedbacks = await _feedbackService.getFeedbacks();
+      final matching = feedbacks
+          .where((feedback) => feedback.orderId == orderId)
+          .toList();
+      matching.sort((left, right) => right.id.compareTo(left.id));
+      existingFeedback.value = matching.isEmpty ? null : matching.first;
+    } on CustomerFeedbackException catch (error) {
+      errorMessage.value = error.message;
+    } catch (_) {
+      errorMessage.value = 'Khong the kiem tra danh gia da gui.';
+    } finally {
+      isLoadingExistingFeedback.value = false;
+    }
+  }
 
   Future<bool> submitFeedback({
     required int orderId,
@@ -28,6 +51,11 @@ class CustomerFeedbackController extends GetxController {
   }) async {
     if (rating < 1 || rating > 5) {
       errorMessage.value = 'Vui lòng chọn số sao đánh giá.';
+      return false;
+    }
+
+    if (existingFeedback.value != null) {
+      errorMessage.value = 'Don hang nay da duoc danh gia.';
       return false;
     }
 
@@ -52,6 +80,7 @@ class CustomerFeedbackController extends GetxController {
           selectedTags: selectedTags,
         ),
       );
+      existingFeedback.value = submittedFeedback.value;
       return true;
     } on CustomerFeedbackException catch (error) {
       errorMessage.value = error.message;

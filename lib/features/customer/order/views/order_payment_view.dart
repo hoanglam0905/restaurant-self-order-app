@@ -586,7 +586,7 @@ class _InvoiceCard extends StatelessWidget {
           Obx(
             () => Column(
               children: [
-                if (controller.appliedDiscount.value > 0) ...[
+                if (controller.discountFor(order) > 0) ...[
                   _InvoiceRow(
                     label: 'Giá trị đơn',
                     value: formatAppPrice(
@@ -597,7 +597,7 @@ class _InvoiceCard extends StatelessWidget {
                   _InvoiceRow(
                     label: 'Giảm điểm',
                     value:
-                        '-${formatAppPrice(controller.appliedDiscount.value, withCurrency: true)}',
+                        '-${formatAppPrice(controller.discountFor(order), withCurrency: true)}',
                   ),
                 ],
                 Row(
@@ -720,6 +720,10 @@ class _LoyaltyPointsPanelState extends State<_LoyaltyPointsPanel> {
               hintText: 'Nhập số điểm',
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.done,
+              onChanged: (value) {
+                final pointsToUse = int.tryParse(value.trim()) ?? 0;
+                widget.controller.updateEnteredPoints(pointsToUse);
+              },
               prefixIcon: const Icon(
                 Icons.redeem_rounded,
                 color: AppColors.orderAccent,

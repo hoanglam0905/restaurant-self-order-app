@@ -30,7 +30,11 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
 
   @override
   void dispose() {
-    Get.delete<ForgotPasswordController>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Get.isRegistered<ForgotPasswordController>()) {
+        Get.delete<ForgotPasswordController>();
+      }
+    });
     super.dispose();
   }
 
@@ -41,7 +45,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
       child: PasswordResetCard(
         title: 'Quên mật khẩu',
         description:
-            'Nhập email tài khoản để nhận mã xác nhận đặt lại mật khẩu.',
+            'Nhap email tai khoan de nhan ma xac nhan dat lai mat khau.',
         children: [
           AppPasswordResetEmailField(controller: _controller),
           Obx(() {
@@ -75,7 +79,9 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Mã xác nhận đã được gửi đến email của bạn.'),
+        content: Text(
+          'Neu tai khoan ton tai, ma xac nhan se duoc gui den email.',
+        ),
         backgroundColor: AppColors.welcomeAccent,
       ),
     );

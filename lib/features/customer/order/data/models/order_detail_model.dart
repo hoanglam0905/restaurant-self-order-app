@@ -8,6 +8,7 @@ class OrderDetailModel {
     required this.totalAmount,
     required this.paymentStatus,
     required this.items,
+    this.discount = 0,
     this.customerName,
     this.reservationTime,
     this.orderDate,
@@ -18,10 +19,18 @@ class OrderDetailModel {
   final int tableNumber;
   final String status;
   final double totalAmount;
+  final double discount;
   final String paymentStatus;
   final List<OrderItemModel> items;
   final DateTime? reservationTime;
   final DateTime? orderDate;
+
+  double get finalAmount {
+    final total = totalAmount - discount;
+    return total < 0 ? 0 : total;
+  }
+
+  bool get hasDiscount => discount > 0;
 
   factory OrderDetailModel.fromJson(Map<String, dynamic> json) {
     return OrderDetailModel(
@@ -30,6 +39,7 @@ class OrderDetailModel {
       tableNumber: (json['tableNumber'] as num?)?.toInt() ?? 0,
       status: json['status'] as String? ?? 'PENDING',
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0,
+      discount: (json['discount'] as num?)?.toDouble() ?? 0,
       paymentStatus: json['paymentStatus'] as String? ?? 'UNPAID',
       items: (json['items'] as List<dynamic>? ?? <dynamic>[])
           .whereType<Map<String, dynamic>>()
@@ -47,6 +57,7 @@ class OrderDetailModel {
     int? tableNumber,
     String? status,
     double? totalAmount,
+    double? discount,
     String? paymentStatus,
     List<OrderItemModel>? items,
     DateTime? reservationTime,
@@ -58,6 +69,7 @@ class OrderDetailModel {
       tableNumber: tableNumber ?? this.tableNumber,
       status: status ?? this.status,
       totalAmount: totalAmount ?? this.totalAmount,
+      discount: discount ?? this.discount,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       items: items ?? this.items,
       reservationTime: reservationTime ?? this.reservationTime,

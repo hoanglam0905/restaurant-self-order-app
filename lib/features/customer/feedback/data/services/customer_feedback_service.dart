@@ -25,6 +25,24 @@ class CustomerFeedbackService {
     }
   }
 
+  Future<List<CustomerFeedbackModel>> getFeedbacks() async {
+    try {
+      final response = await _apiClient.dio.get<dynamic>('/feedback');
+      final data = response.data;
+      if (data is! List) {
+        return const [];
+      }
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(CustomerFeedbackModel.fromJson)
+          .toList();
+    } on DioException catch (error) {
+      throw CustomerFeedbackException(_messageFromDio(error));
+    } catch (_) {
+      throw const CustomerFeedbackException('KhÃ´ng thá»ƒ táº£i Ä‘Ã¡nh giÃ¡.');
+    }
+  }
+
   String _messageFromDio(DioException error) {
     final data = error.response?.data;
     if (data is Map<String, dynamic>) {

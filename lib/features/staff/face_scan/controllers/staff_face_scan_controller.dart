@@ -50,7 +50,7 @@ class StaffFaceScanController extends GetxController {
       }
 
       cameraController = CameraController(
-        frontCamera!,
+        frontCamera,
         ResolutionPreset.medium,
         enableAudio: false,
       );
@@ -72,7 +72,9 @@ class StaffFaceScanController extends GetxController {
   }
 
   Future<void> startScan() async {
-    if (isScanning.value || !isCameraInitialized.value || cameraController == null) {
+    if (isScanning.value ||
+        !isCameraInitialized.value ||
+        cameraController == null) {
       return;
     }
 

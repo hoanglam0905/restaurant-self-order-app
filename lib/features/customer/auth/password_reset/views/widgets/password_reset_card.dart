@@ -142,7 +142,7 @@ class AppPasswordResetOtpField extends StatelessWidget {
     return AppLabeledAuthTextField(
       label: 'Mã xác nhận',
       controller: controller.otpTextController,
-      hintText: '123456',
+      hintText: 'Nhap ma xac nhan',
       prefixIcon: const Icon(
         Icons.pin_outlined,
         color: Color(0xFF8C716A),

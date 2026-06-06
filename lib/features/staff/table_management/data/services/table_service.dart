@@ -118,9 +118,7 @@ class TableService {
 
   Future<void> markNotificationAsRead(int notificationId) async {
     try {
-      await _apiClient.dio.put<dynamic>(
-        '/notifications/$notificationId/read',
-      );
+      await _apiClient.dio.put<dynamic>('/notifications/$notificationId/read');
     } on DioException catch (e) {
       throw Exception(
         'Lỗi đánh dấu thông báo đã đọc: ${e.response?.statusCode} - ${e.response?.data ?? e.message}',
@@ -143,9 +141,7 @@ class TableService {
     try {
       await _apiClient.dio.put(
         '/staff/tables/$tableId',
-        data: {
-          'status': status,
-        },
+        data: {'status': status},
       );
     } on DioException catch (e) {
       throw Exception(
@@ -157,33 +153,33 @@ class TableService {
   }
 
   Future<TableOrderModel?> getActiveOrderByTable(int tableId) async {
-  final orders = await getOrders();
+    final orders = await getOrders();
 
-  final tableOrders = orders
-      .where((order) => order.tableNumber == tableId)
-      .toList();
+    final tableOrders = orders
+        .where((order) => order.tableNumber == tableId)
+        .toList();
 
-  tableOrders.sort((a, b) {
-    final aDate = a.orderDate ?? a.reservationTime ?? DateTime(1970);
-    final bDate = b.orderDate ?? b.reservationTime ?? DateTime(1970);
-    return bDate.compareTo(aDate);
-  });
+    tableOrders.sort((a, b) {
+      final aDate = a.orderDate ?? a.reservationTime ?? DateTime(1970);
+      final bDate = b.orderDate ?? b.reservationTime ?? DateTime(1970);
+      return bDate.compareTo(aDate);
+    });
 
-  final activeOrders = tableOrders.where((order) => order.isActive).toList();
+    final activeOrders = tableOrders.where((order) => order.isActive).toList();
 
-  if (activeOrders.isNotEmpty) {
-    return activeOrders.first;
+    if (activeOrders.isNotEmpty) {
+      return activeOrders.first;
+    }
+
+    if (tableOrders.isNotEmpty) {
+      return tableOrders.first;
+    }
+
+    return null;
   }
 
-  if (tableOrders.isNotEmpty) {
-    return tableOrders.first;
-  }
-
-  return null;
-}
-
-Future<List<TableOrderModel>> getOrders() async {
-  const queryWithNotes = r'''
+  Future<List<TableOrderModel>> getOrders() async {
+    const queryWithNotes = r'''
 query GetOrdersForStaffTable {
   orders {
     orderId
@@ -196,14 +192,17 @@ query GetOrdersForStaffTable {
     orderDate
     items {
       dishId
+      dishName
       quantity
       notes
+      price
+      status
     }
   }
 }
 ''';
 
-  const queryWithoutNotes = r'''
+    const queryWithoutNotes = r'''
 query GetOrdersForStaffTable {
   orders {
     orderId
@@ -216,61 +215,97 @@ query GetOrdersForStaffTable {
     orderDate
     items {
       dishId
+      dishName
       quantity
+      price
+      status
     }
   }
 }
 ''';
 
-  try {
-    return await _fetchOrdersByGraphql(queryWithNotes);
-  } catch (_) {
-    return _fetchOrdersByGraphql(queryWithoutNotes);
+    try {
+      return await _fetchOrdersByGraphql(queryWithNotes);
+    } catch (_) {
+      return _fetchOrdersByGraphql(queryWithoutNotes);
+    }
   }
-}
 
-Future<List<TableOrderModel>> _fetchOrdersByGraphql(String query) async {
-  try {
-    final response = await _apiClient.dio.post<Map<String, dynamic>>(
-      ApiConfig.graphqlUrl,
-      data: {
-        'query': query,
-      },
-    );
+  Future<List<TableOrderModel>> _fetchOrdersByGraphql(String query) async {
+    try {
+      final response = await _apiClient.dio.post<Map<String, dynamic>>(
+        ApiConfig.graphqlUrl,
+        data: {'query': query},
+      );
 
-    final body = response.data ?? <String, dynamic>{};
+      final body = response.data ?? <String, dynamic>{};
 
-    final errors = body['errors'];
-    if (errors is List && errors.isNotEmpty) {
-      throw Exception(errors.map((e) => e.toString()).join('\n'));
+      final errors = body['errors'];
+      if (errors is List && errors.isNotEmpty) {
+        throw Exception(errors.map((e) => e.toString()).join('\n'));
+      }
+
+      final data = body['data'];
+      if (data is! Map) {
+        throw Exception('GraphQL không trả về data hợp lệ.');
+      }
+
+      final rawOrders = data['orders'];
+      if (rawOrders is! List) {
+        throw Exception('GraphQL không trả về danh sách orders.');
+      }
+
+      return rawOrders
+          .whereType<Map>()
+          .map(
+            (order) =>
+                TableOrderModel.fromJson(Map<String, dynamic>.from(order)),
+          )
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(
+        'Lỗi tải order theo bàn: ${e.response?.statusCode} - ${e.response?.data ?? e.message}',
+      );
+    } catch (e) {
+      throw Exception('Lỗi không xác định khi tải order theo bàn: $e');
     }
-
-    final data = body['data'];
-    if (data is! Map) {
-      throw Exception('GraphQL không trả về data hợp lệ.');
-    }
-
-    final rawOrders = data['orders'];
-    if (rawOrders is! List) {
-      throw Exception('GraphQL không trả về danh sách orders.');
-    }
-
-    return rawOrders
-        .whereType<Map>()
-        .map(
-          (order) => TableOrderModel.fromJson(
-            Map<String, dynamic>.from(order),
-          ),
-        )
-        .toList();
-  } on DioException catch (e) {
-    throw Exception(
-      'Lỗi tải order theo bàn: ${e.response?.statusCode} - ${e.response?.data ?? e.message}',
-    );
-  } catch (e) {
-    throw Exception('Lỗi không xác định khi tải order theo bàn: $e');
   }
+
+  Future<void> updateOrderStatus({
+    required int orderId,
+    required String status,
+  }) async {
+    const mutation = r'''
+mutation UpdateOrderStatus($orderId: ID!, $input: UpdateOrderStatusInput!) {
+  updateOrderStatus(orderId: $orderId, input: $input)
 }
+''';
+
+    try {
+      final response = await _apiClient.dio.post<Map<String, dynamic>>(
+        ApiConfig.graphqlUrl,
+        data: {
+          'query': mutation,
+          'variables': {
+            'orderId': orderId.toString(),
+            'input': {'status': status},
+          },
+        },
+      );
+
+      final body = response.data ?? <String, dynamic>{};
+      final errors = body['errors'];
+      if (errors is List && errors.isNotEmpty) {
+        throw Exception(errors.map((e) => e.toString()).join('\n'));
+      }
+    } on DioException catch (e) {
+      throw Exception(
+        'Lỗi cập nhật yêu cầu đặt bàn: ${e.response?.statusCode} - ${e.response?.data ?? e.message}',
+      );
+    } catch (e) {
+      throw Exception('Lỗi không xác định khi cập nhật yêu cầu đặt bàn: $e');
+    }
+  }
 
   Future<void> swapTables({
     required int tableNumberA,

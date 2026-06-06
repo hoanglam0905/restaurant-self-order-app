@@ -98,8 +98,25 @@ class OrderHistoryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 5),
+                      if (order.hasDiscount) ...[
+                        _AmountLine(
+                          label: 'Giá gốc',
+                          value: formatAppPrice(
+                            order.totalAmount,
+                            withCurrency: true,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        _AmountLine(
+                          label: 'Giảm giá',
+                          value:
+                              '-${formatAppPrice(order.discount, withCurrency: true)}',
+                          valueColor: const Color(0xFF3F8E3D),
+                        ),
+                        const SizedBox(height: 5),
+                      ],
                       Text(
-                        formatAppPrice(order.totalAmount, withCurrency: true),
+                        formatAppPrice(order.finalAmount, withCurrency: true),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -196,6 +213,51 @@ class _PaymentBadge extends StatelessWidget {
           fontWeight: FontWeight.w900,
         ),
       ),
+    );
+  }
+}
+
+class _AmountLine extends StatelessWidget {
+  const _AmountLine({
+    required this.label,
+    required this.value,
+    this.valueColor = const Color(0xFF686267),
+  });
+
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 54,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF8E888B),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

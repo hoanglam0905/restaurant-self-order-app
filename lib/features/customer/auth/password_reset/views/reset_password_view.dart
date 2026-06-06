@@ -32,7 +32,11 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
 
   @override
   void dispose() {
-    Get.delete<ResetPasswordController>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Get.isRegistered<ResetPasswordController>()) {
+        Get.delete<ResetPasswordController>();
+      }
+    });
     super.dispose();
   }
 
@@ -43,7 +47,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       child: PasswordResetCard(
         title: 'Đặt lại mật khẩu',
         description:
-            'Nhập mã xác nhận đã gửi đến ${widget.email} và mật khẩu mới.',
+            'Nhap ma xac nhan da duoc gui den ${widget.email} va mat khau moi.',
         children: [
           AppPasswordResetOtpField(controller: _controller),
           const SizedBox(height: 16),

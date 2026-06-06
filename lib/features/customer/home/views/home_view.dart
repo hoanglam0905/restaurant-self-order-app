@@ -11,6 +11,7 @@ import '../../menu/views/menu_view.dart';
 import '../../notifications/controllers/customer_notification_controller.dart';
 import '../../order/data/services/order_history_service.dart';
 import '../../order/views/order_history_view.dart';
+import '../../reservation/views/customer_reservation_view.dart';
 import '../../settings/views/settings_view.dart';
 import '../controllers/call_staff_controller.dart';
 import '../controllers/home_controller.dart';
@@ -81,7 +82,7 @@ class _HomeViewState extends State<HomeView> {
               const SizedBox(height: 8),
               MenuOrderButton(onTap: () => _openViewOnlyMenu(context)),
               const SizedBox(height: 12),
-              HomeReservationButton(onTap: () => _showPendingFeature(context)),
+              HomeReservationButton(onTap: () => _openReservation(context)),
               const SizedBox(height: 12),
               TodaySpecialSection(controller: _controller),
             ],
@@ -190,6 +191,13 @@ class _HomeViewState extends State<HomeView> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const MenuView.viewOnly()),
+    );
+  }
+
+  void _openReservation(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CustomerReservationView()),
     );
   }
 

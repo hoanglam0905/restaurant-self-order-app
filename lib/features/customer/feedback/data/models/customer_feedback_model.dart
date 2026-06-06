@@ -31,4 +31,28 @@ class CustomerFeedbackModel {
       checked: json['checked'] as bool? ?? false,
     );
   }
+
+  List<String> get selectedTags {
+    final markerIndex = comment.indexOf('\nTags:');
+    if (markerIndex < 0) {
+      return const [];
+    }
+    final rawTags = comment.substring(markerIndex + '\nTags:'.length).trim();
+    if (rawTags.isEmpty) {
+      return const [];
+    }
+    return rawTags
+        .split(',')
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
+  }
+
+  String get displayComment {
+    final markerIndex = comment.indexOf('\nTags:');
+    final rawComment = markerIndex < 0
+        ? comment
+        : comment.substring(0, markerIndex);
+    return rawComment.trim();
+  }
 }

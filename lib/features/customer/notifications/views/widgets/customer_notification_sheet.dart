@@ -103,6 +103,7 @@ class _CustomerNotificationTile extends StatelessWidget {
     final icon = switch (notification.kind) {
       CustomerNotificationKind.orderItem => Icons.restaurant_rounded,
       CustomerNotificationKind.payment => Icons.payments_rounded,
+      CustomerNotificationKind.staffRequest => Icons.room_service_rounded,
       CustomerNotificationKind.order => Icons.receipt_long_rounded,
     };
 

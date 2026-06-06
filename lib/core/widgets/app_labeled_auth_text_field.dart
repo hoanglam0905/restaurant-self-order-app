@@ -12,6 +12,7 @@ class AppLabeledAuthTextField extends StatelessWidget {
     this.obscureText = false,
     this.keyboardType,
     this.textInputAction,
+    this.onChanged,
     this.onSubmitted,
     super.key,
   });
@@ -24,6 +25,7 @@ class AppLabeledAuthTextField extends StatelessWidget {
   final bool obscureText;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
   @override
@@ -50,6 +52,7 @@ class AppLabeledAuthTextField extends StatelessWidget {
           obscureText: obscureText,
           keyboardType: keyboardType,
           textInputAction: textInputAction,
+          onChanged: onChanged,
           onSubmitted: onSubmitted,
           height: 44,
           borderRadius: 8,

@@ -1,13 +1,17 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
+import '../../../../core/widgets/app_cta_button.dart';
 import '../data/models/order_dish_model.dart';
 import '../data/models/staff_table_model.dart';
+import '../data/models/table_order_model.dart';
 import '../data/models/table_status.dart';
 import '../data/services/dish_catalog_service.dart';
 import '../data/services/order_graphql_service.dart';
 import '../data/services/table_service.dart';
+import '../controllers/reservation_approval_controller.dart';
 import '../../../../core/network/api_client.dart';
 
 const Color _brandColor = Color(0xFFB63A1B);
@@ -29,6 +33,8 @@ class _OrderReservationViewState extends State<OrderReservationView> {
   final TableService _tableService = TableService(ApiClient());
   final DishCatalogService _dishCatalogService = DishCatalogService();
   final OrderGraphqlService _orderGraphqlService = OrderGraphqlService();
+  late final String _reservationControllerTag;
+  late final ReservationApprovalController _reservationController;
 
   int _activeTopTab = 0;
   int _selectedTableIndex = 0;
@@ -46,12 +52,18 @@ class _OrderReservationViewState extends State<OrderReservationView> {
   @override
   void initState() {
     super.initState();
+    _reservationControllerTag = UniqueKey().toString();
+    _reservationController = Get.put(
+      ReservationApprovalController(tableService: _tableService),
+      tag: _reservationControllerTag,
+    );
     _loadInitialData();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    Get.delete<ReservationApprovalController>(tag: _reservationControllerTag);
     super.dispose();
   }
 
@@ -116,12 +128,14 @@ class _OrderReservationViewState extends State<OrderReservationView> {
       final dish = entry.value;
       final categories = _categories;
 
-      final matchesCategory = _selectedCategoryIndex == 0 ||
+      final matchesCategory =
+          _selectedCategoryIndex == 0 ||
           dish.categoryName == categories[_selectedCategoryIndex];
 
       final normalizedSearch = _searchText.trim().toLowerCase();
 
-      final matchesSearch = normalizedSearch.isEmpty ||
+      final matchesSearch =
+          normalizedSearch.isEmpty ||
           dish.name.toLowerCase().contains(normalizedSearch) ||
           dish.description.toLowerCase().contains(normalizedSearch) ||
           dish.categoryName.toLowerCase().contains(normalizedSearch);
@@ -167,18 +181,12 @@ class _OrderReservationViewState extends State<OrderReservationView> {
     final selectedEntries = _selectedDishEntries;
 
     if (selectedTable == null) {
-      _showSnackBar(
-        message: 'Vui lòng chọn bàn.',
-        isError: true,
-      );
+      _showSnackBar(message: 'Vui lòng chọn bàn.', isError: true);
       return;
     }
 
     if (selectedEntries.isEmpty) {
-      _showSnackBar(
-        message: 'Vui lòng chọn ít nhất 1 món.',
-        isError: true,
-      );
+      _showSnackBar(message: 'Vui lòng chọn ít nhất 1 món.', isError: true);
       return;
     }
 
@@ -222,10 +230,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
     } catch (e) {
       if (!mounted) return;
 
-      _showSnackBar(
-        message: e.toString(),
-        isError: true,
-      );
+      _showSnackBar(message: e.toString(), isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -240,10 +245,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
     await _submitOrder();
   }
 
-  void _showSnackBar({
-    required String message,
-    required bool isError,
-  }) {
+  void _showSnackBar({required String message, required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -361,7 +363,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
             boxShadow: isActive
                 ? [
                     BoxShadow(
-                      color: _brandColor.withOpacity(0.22),
+                      color: _brandColor.withValues(alpha: 0.22),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -383,9 +385,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
 
   Widget _buildOrderTab() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: _brandColor),
-      );
+      return const Center(child: CircularProgressIndicator(color: _brandColor));
     }
 
     if (_errorMessage.isNotEmpty) {
@@ -457,12 +457,468 @@ class _OrderReservationViewState extends State<OrderReservationView> {
   }
 
   Widget _buildReservationUnavailableTab() {
-    return _buildEmptyState(
-      icon: Icons.event_busy_outlined,
-      title: 'Chức năng đặt bàn chưa kết nối API',
-      message:
-          'Hiện backend bạn gửi chỉ có API bàn, món và order. Chưa thấy API reservation nên tab này không dùng mock data nữa.',
+    return Obx(() {
+      if (_reservationController.isLoading.value &&
+          _reservationController.reservations.isEmpty) {
+        return const Center(
+          child: CircularProgressIndicator(color: _brandColor),
+        );
+      }
+
+      if (_reservationController.errorMessage.value.isNotEmpty &&
+          _reservationController.reservations.isEmpty) {
+        return _buildReservationErrorState();
+      }
+
+      if (_reservationController.reservations.isEmpty) {
+        return _buildEmptyState(
+          icon: Icons.event_available_outlined,
+          title: 'Chưa có yêu cầu đặt bàn',
+          message:
+              'Các order có reservationTime từ GraphQL sẽ xuất hiện tại đây.',
+        );
+      }
+
+      final pending = _reservationController.pendingReservations;
+      final reviewed = _reservationController.reviewedReservations;
+
+      return RefreshIndicator(
+        onRefresh: _reservationController.loadReservations,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+          children: [
+            _buildReservationSummary(pending.length, reviewed.length),
+            const SizedBox(height: 14),
+            _buildSectionTitle(
+              title: 'Yêu cầu chờ duyệt',
+              trailing: TextButton.icon(
+                onPressed: _reservationController.loadReservations,
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: _brandColor,
+                  size: 15,
+                ),
+                label: const Text(
+                  'Tải lại',
+                  style: TextStyle(
+                    color: _brandColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (pending.isEmpty)
+              _buildInlineEmptyReservation()
+            else
+              ...pending.map(_buildReservationRequestCard),
+            if (reviewed.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildSectionTitle(title: 'Đã xử lý gần đây'),
+              const SizedBox(height: 10),
+              ...reviewed.take(5).map(_buildReservationRequestCard),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildReservationErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline_rounded, size: 46, color: Colors.red[400]),
+            const SizedBox(height: 10),
+            Text(
+              _reservationController.errorMessage.value,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _textMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            AppCtaButton(
+              label: 'Thử lại',
+              onPressed: _reservationController.loadReservations,
+              backgroundColor: _brandColor,
+              height: 42,
+              borderRadius: 8,
+              fontSize: 13,
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildReservationSummary(int pendingCount, int reviewedCount) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8DCD8)),
+      ),
+      child: Row(
+        children: [
+          _buildReservationMetric(
+            label: 'Chờ duyệt',
+            value: '$pendingCount',
+            icon: Icons.pending_actions_rounded,
+          ),
+          Container(width: 1, height: 42, color: const Color(0xFFE8DCD8)),
+          _buildReservationMetric(
+            label: 'Đã xử lý',
+            value: '$reviewedCount',
+            icon: Icons.verified_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReservationMetric({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: _brandSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: _brandColor, size: 18),
+          ),
+          const SizedBox(width: 9),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: _textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: _textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInlineEmptyReservation() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8DCD8)),
+      ),
+      child: const Text(
+        'Không còn yêu cầu đặt bàn cần duyệt.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: _textMuted,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReservationRequestCard(TableOrderModel order) {
+    final isPending = order.status.toUpperCase() == 'SCHEDULED';
+    final date = order.reservationTime;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8DCD8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: _brandSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.event_seat_rounded,
+                  color: _brandColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.customerName.isEmpty
+                          ? 'Khách đặt bàn'
+                          : order.customerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      date == null
+                          ? 'Chưa có thời gian'
+                          : _formatDateTime(date),
+                      style: const TextStyle(
+                        color: _textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildReservationStatusPill(order.status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildReservationInfo(
+                icon: Icons.table_restaurant_outlined,
+                label: 'Bàn',
+                value: order.tableNumber.toString().padLeft(2, '0'),
+              ),
+              const SizedBox(width: 10),
+              _buildReservationInfo(
+                icon: Icons.restaurant_menu_rounded,
+                label: 'Món đặt trước',
+                value: '${order.items.length}',
+              ),
+              const SizedBox(width: 10),
+              _buildReservationInfo(
+                icon: Icons.receipt_long_rounded,
+                label: 'Tạm tính',
+                value: _formatCurrency(order.totalAmount),
+              ),
+            ],
+          ),
+          if (order.items.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: Color(0xFFE8DCD8)),
+            const SizedBox(height: 10),
+            ...order.items.take(3).map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'x${item.quantity}',
+                      style: const TextStyle(
+                        color: _textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+          if (isPending) ...[
+            const SizedBox(height: 14),
+            Obx(
+              () => Row(
+                children: [
+                  Expanded(
+                    child: AppCtaButton(
+                      label: 'Từ chối',
+                      onPressed: () => _rejectReservation(order),
+                      enabled: !_reservationController.isActionLoading.value,
+                      backgroundColor: const Color(0xFFF8EFEA),
+                      foregroundColor: _brandColor,
+                      height: 42,
+                      borderRadius: 10,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AppCtaButton(
+                      label: 'Chấp nhận',
+                      onPressed: () => _approveReservation(order),
+                      enabled: !_reservationController.isActionLoading.value,
+                      backgroundColor: _brandColor,
+                      height: 42,
+                      borderRadius: 10,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReservationInfo({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFAF7F6),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: _brandColor, size: 15),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _textMuted,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReservationStatusPill(String status) {
+    final normalized = status.toUpperCase();
+    final label = switch (normalized) {
+      'SCHEDULED' => 'Pending',
+      'PENDING' => 'Accepted',
+      'CANCELLED' || 'CANCELED' => 'Rejected',
+      'COMPLETED' => 'Done',
+      _ => status,
+    };
+    final color = switch (normalized) {
+      'SCHEDULED' => const Color(0xFFC98100),
+      'CANCELLED' || 'CANCELED' => const Color(0xFFC62828),
+      'COMPLETED' => const Color(0xFF2E7D32),
+      _ => _brandColor,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approveReservation(TableOrderModel order) async {
+    final success = await _reservationController.approveReservation(order);
+    if (!mounted) return;
+    _showSnackBar(
+      message: success
+          ? 'Đã chấp nhận yêu cầu đặt bàn #${order.orderId}.'
+          : _reservationController.errorMessage.value,
+      isError: !success,
+    );
+  }
+
+  Future<void> _rejectReservation(TableOrderModel order) async {
+    final success = await _reservationController.rejectReservation(order);
+    if (!mounted) return;
+    _showSnackBar(
+      message: success
+          ? 'Đã từ chối yêu cầu đặt bàn #${order.orderId}.'
+          : _reservationController.errorMessage.value,
+      isError: !success,
+    );
+  }
+
+  String _formatDateTime(DateTime value) {
+    return '${value.day.toString().padLeft(2, '0')}/'
+        '${value.month.toString().padLeft(2, '0')}/'
+        '${value.year} '
+        '${value.hour.toString().padLeft(2, '0')}:'
+        '${value.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _buildErrorState() {
@@ -571,7 +1027,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
             ),
           ),
         ),
-        if (trailing != null) trailing,
+        ?trailing,
       ],
     );
   }
@@ -583,8 +1039,6 @@ class _OrderReservationViewState extends State<OrderReservationView> {
         children: List.generate(_tables.length, (index) {
           final table = _tables[index];
           final isActive = _selectedTableIndex == index;
-          final isAvailable = table.status == TableStatus.available;
-
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: InkWell(
@@ -614,15 +1068,15 @@ class _OrderReservationViewState extends State<OrderReservationView> {
                       ),
                     ),
                     Text(
-                        _tableStatusLabel(table.status),
-                        style: TextStyle(
-                          color: isActive
-                              ? Colors.white.withOpacity(0.9)
-                              : _textMuted,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      _tableStatusLabel(table.status),
+                      style: TextStyle(
+                        color: isActive
+                            ? Colors.white.withValues(alpha: 0.9)
+                            : _textMuted,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -641,7 +1095,7 @@ class _OrderReservationViewState extends State<OrderReservationView> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -661,16 +1115,18 @@ class _OrderReservationViewState extends State<OrderReservationView> {
       ),
     );
   }
-String _tableStatusLabel(TableStatus status) {
-  switch (status) {
-    case TableStatus.available:
-      return 'Trống';
-    case TableStatus.occupied:
-      return 'Có khách';
-    case TableStatus.reserved:
-      return 'Đặt trước';
+
+  String _tableStatusLabel(TableStatus status) {
+    switch (status) {
+      case TableStatus.available:
+        return 'Trống';
+      case TableStatus.occupied:
+        return 'Có khách';
+      case TableStatus.reserved:
+        return 'Đặt trước';
+    }
   }
-}
+
   Widget _buildCategoryTabs() {
     final categories = _categories;
 
@@ -693,8 +1149,9 @@ String _tableStatusLabel(TableStatus status) {
                       style: TextStyle(
                         color: isActive ? _brandColor : _textPrimary,
                         fontSize: 12,
-                        fontWeight:
-                            isActive ? FontWeight.w800 : FontWeight.w600,
+                        fontWeight: isActive
+                            ? FontWeight.w800
+                            : FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -725,7 +1182,7 @@ String _tableStatusLabel(TableStatus status) {
         border: Border.all(color: const Color(0xFFE8DCD8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.035),
+            color: Colors.black.withValues(alpha: 0.035),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -751,7 +1208,9 @@ String _tableStatusLabel(TableStatus status) {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  dish.description.isEmpty ? dish.categoryName : dish.description,
+                  dish.description.isEmpty
+                      ? dish.categoryName
+                      : dish.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -811,11 +1270,7 @@ String _tableStatusLabel(TableStatus status) {
             ),
           ),
         ),
-        _buildRoundCounterButton(
-          icon: Icons.add,
-          active: true,
-          onTap: onPlus,
-        ),
+        _buildRoundCounterButton(icon: Icons.add, active: true, onTap: onPlus),
       ],
     );
   }
@@ -836,11 +1291,7 @@ String _tableStatusLabel(TableStatus status) {
           color: active ? _brandColor : const Color(0xFFE9EEF5),
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          icon,
-          color: active ? Colors.white : _textMuted,
-          size: 14,
-        ),
+        child: Icon(icon, color: active ? Colors.white : _textMuted, size: 14),
       ),
     );
   }
@@ -853,7 +1304,7 @@ String _tableStatusLabel(TableStatus status) {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
-          top: BorderSide(color: _brandColor.withOpacity(0.18)),
+          top: BorderSide(color: _brandColor.withValues(alpha: 0.18)),
         ),
       ),
       child: Column(
@@ -945,7 +1396,7 @@ String _tableStatusLabel(TableStatus status) {
                 backgroundColor: _brandColor,
                 foregroundColor: Colors.white,
                 elevation: 8,
-                shadowColor: _brandColor.withOpacity(0.26),
+                shadowColor: _brandColor.withValues(alpha: 0.26),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1044,8 +1495,8 @@ String _tableStatusLabel(TableStatus status) {
                       child: ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         itemCount: selectedEntries.length,
-                        separatorBuilder: (_, __) => Divider(
-                          color: _brandColor.withOpacity(0.18),
+                        separatorBuilder: (_, _) => Divider(
+                          color: _brandColor.withValues(alpha: 0.18),
                           height: 16,
                         ),
                         itemBuilder: (context, index) {
@@ -1227,7 +1678,9 @@ String _tableStatusLabel(TableStatus status) {
                                   backgroundColor: _brandColor,
                                   foregroundColor: Colors.white,
                                   elevation: 8,
-                                  shadowColor: _brandColor.withOpacity(0.25),
+                                  shadowColor: _brandColor.withValues(
+                                    alpha: 0.25,
+                                  ),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 24,
                                   ),
@@ -1290,7 +1743,7 @@ String _tableStatusLabel(TableStatus status) {
               width: size,
               height: size,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildDishImageFallback(size),
+              errorBuilder: (_, _, _) => _buildDishImageFallback(size),
             ),
     );
   }
@@ -1313,7 +1766,7 @@ String _tableStatusLabel(TableStatus status) {
         border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),
@@ -1338,5 +1791,5 @@ String _formatCurrency(int value) {
     }
   }
 
-  return '${buffer}đ';
+  return '$bufferđ';
 }
