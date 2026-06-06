@@ -47,7 +47,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       child: PasswordResetCard(
         title: 'Đặt lại mật khẩu',
         description:
-            'Nhap ma xac nhan 123456 cho ${widget.email} va mat khau moi.',
+            'Nhap ma xac nhan da duoc gui den ${widget.email} va mat khau moi.',
         children: [
           AppPasswordResetOtpField(controller: _controller),
           const SizedBox(height: 16),

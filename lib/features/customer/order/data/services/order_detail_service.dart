@@ -58,13 +58,32 @@ query OrderDetail($orderId: ID!) {
         throw const OrderDetailException('Không tìm thấy đơn hàng.');
       }
 
-      return OrderDetailModel.fromJson(data['order'] as Map<String, dynamic>);
+      return _attachPaymentDetails(
+        OrderDetailModel.fromJson(data['order'] as Map<String, dynamic>),
+      );
     } on OrderDetailException {
       rethrow;
     } on DioException catch (error) {
       throw OrderDetailException(_orderMessageFromDio(error));
     } catch (_) {
       throw const OrderDetailException('Không thể tải đơn hàng.');
+    }
+  }
+
+  Future<OrderDetailModel> _attachPaymentDetails(OrderDetailModel order) async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/payment/payment/status/${order.orderId}',
+      );
+      final data = response.data ?? <String, dynamic>{};
+      return order.copyWith(
+        discount: (data['discount'] as num?)?.toDouble() ?? order.discount,
+        totalAmount:
+            (data['totalAmount'] as num?)?.toDouble() ?? order.totalAmount,
+        paymentStatus: data['paymentStatus']?.toString() ?? order.paymentStatus,
+      );
+    } catch (_) {
+      return order;
     }
   }
 

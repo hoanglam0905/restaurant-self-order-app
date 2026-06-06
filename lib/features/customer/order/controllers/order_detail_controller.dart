@@ -48,6 +48,7 @@ class OrderDetailController extends GetxController {
   final RxBool isApplyingPoints = false.obs;
   final RxInt cancellingDishId = 0.obs;
   final RxInt availablePoints = 0.obs;
+  final RxInt enteredPointsToUse = 0.obs;
   final RxInt appliedPointsToUse = 0.obs;
   final RxDouble appliedDiscount = 0.0.obs;
   final RxDouble payableAmount = 0.0.obs;
@@ -114,7 +115,7 @@ class OrderDetailController extends GetxController {
       final result = await _orderDetailService.processPayment(
         order: currentOrder,
         paymentMethod: method.apiValue,
-        pointsToUse: appliedPointsToUse.value,
+        pointsToUse: _pointsToUseForPayment,
       );
       paymentMessage.value = result.message;
       if (result.success && result.paymentStatus?.toUpperCase() == 'PAID') {
@@ -158,7 +159,7 @@ class OrderDetailController extends GetxController {
       await _orderDetailService.processPayment(
         order: currentOrder,
         paymentMethod: method.apiValue,
-        pointsToUse: appliedPointsToUse.value,
+        pointsToUse: _pointsToUseForPayment,
         confirmPayment: false,
       );
       await _orderDetailService.requestStaffPaymentCollection(
@@ -197,9 +198,18 @@ class OrderDetailController extends GetxController {
     paymentMessage.value = '';
 
     try {
+      final pointsToUse = _pointsToUseForPayment;
+      if (pointsToUse > 0 && appliedPointsToUse.value != pointsToUse) {
+        final applied = await applyPoints(pointsToUse);
+        if (!applied) {
+          paymentMessage.value = loyaltyMessage.value;
+          return null;
+        }
+      }
+
       final result = await _orderDetailService.createVNPayPayment(
         currentOrder,
-        pointsToUse: appliedPointsToUse.value,
+        pointsToUse: _pointsToUseForPayment,
       );
       vnpayPaymentUrl.value = result.paymentUrl;
       paymentMessage.value = result.message;
@@ -223,6 +233,8 @@ class OrderDetailController extends GetxController {
   }
 
   Future<bool> applyPoints(int pointsToUse) async {
+    updateEnteredPoints(pointsToUse);
+
     final currentOrder = order.value;
     if (currentOrder == null) {
       loyaltyMessage.value = 'Không tìm thấy đơn hàng cần áp điểm.';
@@ -320,6 +332,15 @@ class OrderDetailController extends GetxController {
 
   double payableAmountFor(OrderDetailModel order) => _payableAmountFor(order);
 
+  double discountFor(OrderDetailModel order) => _discountFor(order);
+
+  void updateEnteredPoints(int pointsToUse) {
+    enteredPointsToUse.value = pointsToUse > 0 ? pointsToUse : 0;
+    if (enteredPointsToUse.value != appliedPointsToUse.value) {
+      vnpayPaymentUrl.value = '';
+    }
+  }
+
   Future<void> refreshLoyaltyBalance() async {
     try {
       final session = await _authSessionStorage.readCustomerSession();
@@ -351,11 +372,34 @@ class OrderDetailController extends GetxController {
     return (payable ~/ 100000) * 1000;
   }
 
+  int get _pointsToUseForPayment {
+    if (enteredPointsToUse.value > 0) {
+      return enteredPointsToUse.value;
+    }
+    return appliedPointsToUse.value;
+  }
+
+  double _discountFor(OrderDetailModel order) {
+    if (appliedDiscount.value > 0) {
+      return appliedDiscount.value;
+    }
+    final points = enteredPointsToUse.value;
+    if (points <= 0) {
+      return 0;
+    }
+    if (availablePoints.value > 0 && points > availablePoints.value) {
+      return 0;
+    }
+    final discount = points.toDouble();
+    return discount > order.totalAmount ? order.totalAmount : discount;
+  }
+
   double _payableAmountFor(OrderDetailModel order) {
-    if (appliedDiscount.value <= 0) {
+    final discount = _discountFor(order);
+    if (discount <= 0) {
       return order.totalAmount;
     }
-    final payable = order.totalAmount - appliedDiscount.value;
+    final payable = order.totalAmount - discount;
     return payable < 0 ? 0 : payable;
   }
 

@@ -7,6 +7,7 @@ class AppAuthTextField extends StatelessWidget {
     this.obscureText = false,
     this.keyboardType,
     this.textInputAction,
+    this.onChanged,
     this.onSubmitted,
     this.prefixIcon,
     this.suffixIcon,
@@ -21,6 +22,7 @@ class AppAuthTextField extends StatelessWidget {
   final bool obscureText;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final Widget? prefixIcon;
   final Widget? suffixIcon;
@@ -37,6 +39,7 @@ class AppAuthTextField extends StatelessWidget {
         obscureText: obscureText,
         keyboardType: keyboardType,
         textInputAction: textInputAction,
+        onChanged: onChanged,
         onSubmitted: onSubmitted,
         style: const TextStyle(
           color: Color(0xFF161C23),

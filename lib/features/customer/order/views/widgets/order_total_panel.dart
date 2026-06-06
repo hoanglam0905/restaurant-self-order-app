@@ -51,13 +51,20 @@ class OrderTotalPanel extends StatelessWidget {
             label: 'Tạm tính',
             value: formatAppPrice(order.totalAmount, withCurrency: true),
           ),
+          if (order.hasDiscount) ...[
+            const SizedBox(height: 10),
+            _TotalRow(
+              label: 'Giảm giá',
+              value: '-${formatAppPrice(order.discount, withCurrency: true)}',
+            ),
+          ],
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: Color(0x66E0BFB7), thickness: 1),
           ),
           _TotalRow(
             label: 'Tổng cộng',
-            value: formatAppPrice(order.totalAmount, withCurrency: true),
+            value: formatAppPrice(order.finalAmount, withCurrency: true),
             emphasized: true,
           ),
         ],
