@@ -89,6 +89,8 @@ flutter pub get
 flutter run
 
 ## Dependencies chính:
+
+```text
 dio: ^5.9.0
 flutter_secure_storage: ^9.2.4
 get: ^4.7.2
@@ -102,7 +104,7 @@ path_provider: ^2.1.5
 open_filex: ^4.7.0
 camera: ^0.12.0+1
 flutter_local_notifications: ^21.0.0
-
+```
 ## Cấu hình Backend
 
 Ứng dụng kết nối tới Backend đã được triển khai trên Render.
@@ -188,6 +190,7 @@ http://localhost:5173/login
 
 ## Cấu trúc thư mục
 
+```text
 lib/
 ├── app/
 ├── core/
@@ -219,9 +222,7 @@ lib/
 │       └── staff_navigation_shell.dart
 │
 └── main.dart
-
----
-
+```
 ## Kiểm tra source code
 flutter analyze
 
